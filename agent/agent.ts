@@ -1,7 +1,7 @@
 import { defineAgent, defineDynamic } from "eve";
 import { scopeFromPrincipal } from "@/lib/access-scope";
-import { createHaikuModelSelection } from "@/lib/anthropic";
-import { DIRECT_HAIKU_MODEL_ID, getModelSettings } from "@/lib/model-config";
+import { getModelSettings } from "@/lib/model-config";
+import { resolveModelSelection } from "@/lib/models";
 
 export default defineAgent({
   experimental: {
@@ -13,9 +13,7 @@ export default defineAgent({
         const caller = ctx.session.auth.current ?? ctx.session.auth.initiator;
         if (!caller) throw new Error("An authenticated user is required.");
         const { modelId } = await getModelSettings(scopeFromPrincipal(caller));
-        return modelId === DIRECT_HAIKU_MODEL_ID
-          ? createHaikuModelSelection()
-          : modelId;
+        return resolveModelSelection(modelId);
       },
     },
   }),
