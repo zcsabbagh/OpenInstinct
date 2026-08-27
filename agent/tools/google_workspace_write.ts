@@ -1,8 +1,12 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import {
+  calendarEventDeleteSchema,
   calendarEventSchema,
+  calendarEventUpdateSchema,
   createCalendarEvent,
+  deleteCalendarEvent,
+  updateCalendarEvent,
 } from "@/agent/lib/google-workspace/calendar";
 import {
   GMAIL_UPDATE_ACTIONS,
@@ -22,9 +26,21 @@ const sendEmailSchema = gmailSendSchema.extend({
 const createCalendarEventSchema = calendarEventSchema.extend({
   action: z.literal("create_calendar_event"),
 });
+const updateCalendarEventSchema = calendarEventUpdateSchema.extend({
+  action: z.literal("update_calendar_event"),
+});
+const deleteCalendarEventSchema = calendarEventDeleteSchema.extend({
+  action: z.literal("delete_calendar_event"),
+});
 
 export const googleWorkspaceWriteInputSchema = z.object({
-  action: z.enum(["update_email", "send_email", "create_calendar_event"]),
+  action: z.enum([
+    "update_email",
+    "send_email",
+    "create_calendar_event",
+    "update_calendar_event",
+    "delete_calendar_event",
+  ]),
   attendees: z.array(z.email()).max(50).optional(),
   bcc: z.array(z.email()).max(20).optional(),
   body: z.string().min(1).max(100_000).optional(),
@@ -32,6 +48,7 @@ export const googleWorkspaceWriteInputSchema = z.object({
   cc: z.array(z.email()).max(20).optional(),
   description: z.string().max(8_000).optional(),
   end: z.iso.datetime({ offset: true }).optional(),
+  eventId: z.string().min(1).max(1_024).optional(),
   inReplyTo: z.string().max(998).optional(),
   location: z.string().max(1_000).optional(),
   messageIds: z.array(z.string().min(1).max(200)).min(1).max(100).optional(),
@@ -57,7 +74,7 @@ export function googleWorkspaceWriteApproval(
 export default defineTool({
   approval: ({ toolInput }) => googleWorkspaceWriteApproval(toolInput?.action),
   description:
-    "Change the authenticated user's Google Workspace. Reversible Gmail label updates act on exact message IDs. Sending email or creating a confirmed calendar event requires user approval. This tool cannot delete mail, change account settings, or edit contacts.",
+    "Change the authenticated user's Google Workspace. Reversible Gmail label updates act on exact message IDs. Sending email or creating, editing, or deleting a calendar event requires user approval. Calendar edits and deletes act on an exact event ID from a prior read. This tool cannot delete mail, change account settings, or edit contacts.",
   inputSchema: googleWorkspaceWriteInputSchema,
   async execute(input, ctx) {
     switch (input.action) {
@@ -92,6 +109,20 @@ export default defineTool({
             createCalendarEventSchema.parse(input)
           ),
         };
+      case "update_calendar_event":
+        return {
+          action: input.action,
+          event: await updateCalendarEvent(
+            ctx,
+            updateCalendarEventSchema.parse(input)
+          ),
+          updated: true,
+        };
+      case "delete_calendar_event": {
+        const parsed = deleteCalendarEventSchema.parse(input);
+        await deleteCalendarEvent(ctx, parsed);
+        return { action: input.action, deleted: true, eventId: parsed.eventId };
+      }
     }
   },
 });

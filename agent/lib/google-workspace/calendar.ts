@@ -14,6 +14,23 @@ export const calendarEventSchema = z.object({
   timezone: z.string().min(1).default("UTC"),
 });
 
+export const calendarEventUpdateSchema = z.object({
+  attendees: z.array(z.email()).max(50).optional(),
+  calendarId: z.string().default("primary"),
+  description: z.string().max(8_000).optional(),
+  end: z.iso.datetime({ offset: true }).optional(),
+  eventId: z.string().min(1).max(1_024),
+  location: z.string().max(1_000).optional(),
+  start: z.iso.datetime({ offset: true }).optional(),
+  summary: z.string().min(1).max(1_000).optional(),
+  timezone: z.string().min(1).default("UTC"),
+});
+
+export const calendarEventDeleteSchema = z.object({
+  calendarId: z.string().default("primary"),
+  eventId: z.string().min(1).max(1_024),
+});
+
 const calendarAvailabilitySchema = z.object({
   calendars: z
     .record(
@@ -142,6 +159,45 @@ export async function createCalendarEvent(
       z.record(z.string(), z.unknown())
     );
   }
+}
+
+export async function updateCalendarEvent(
+  ctx: ToolContext,
+  payload: z.infer<typeof calendarEventUpdateSchema>
+) {
+  const body: Record<string, unknown> = {};
+  if (payload.summary !== undefined) body.summary = payload.summary;
+  if (payload.description !== undefined) body.description = payload.description;
+  if (payload.location !== undefined) body.location = payload.location;
+  if (payload.start !== undefined) {
+    body.start = { dateTime: payload.start, timeZone: payload.timezone };
+  }
+  if (payload.end !== undefined) {
+    body.end = { dateTime: payload.end, timeZone: payload.timezone };
+  }
+  if (payload.attendees !== undefined) {
+    body.attendees = payload.attendees.map((email) => ({ email }));
+  }
+
+  return googleWorkspaceFetch(
+    ctx,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(payload.calendarId)}/events/${encodeURIComponent(payload.eventId)}?sendUpdates=${payload.attendees?.length ? "all" : "none"}`,
+    z.record(z.string(), z.unknown()),
+    { body: JSON.stringify(body), method: "PATCH" }
+  );
+}
+
+export async function deleteCalendarEvent(
+  ctx: ToolContext,
+  input: z.infer<typeof calendarEventDeleteSchema>
+) {
+  await googleWorkspaceFetch(
+    ctx,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}`,
+    z.unknown(),
+    { method: "DELETE" }
+  );
+  return { deleted: true, eventId: input.eventId };
 }
 
 export async function searchGoogleContacts(
