@@ -135,11 +135,17 @@ describe("Google Workspace connection", () => {
     });
   });
 
-  it("requires approval for consequential writes only", () => {
-    expect(googleWorkspaceWriteApproval("update_email")).toBe("not-applicable");
+  it("requires approval only for sending email", () => {
     expect(googleWorkspaceWriteApproval("send_email")).toBe("user-approval");
+    expect(googleWorkspaceWriteApproval("update_email")).toBe("not-applicable");
     expect(googleWorkspaceWriteApproval("create_calendar_event")).toBe(
-      "user-approval"
+      "not-applicable"
+    );
+    expect(googleWorkspaceWriteApproval("update_calendar_event")).toBe(
+      "not-applicable"
+    );
+    expect(googleWorkspaceWriteApproval("delete_calendar_event")).toBe(
+      "not-applicable"
     );
   });
 

@@ -68,7 +68,10 @@ type GoogleWorkspaceWriteAction = z.infer<
 export function googleWorkspaceWriteApproval(
   action: GoogleWorkspaceWriteAction | undefined
 ) {
-  return action === "update_email" ? "not-applicable" : "user-approval";
+  // Only sending email reaches other people and needs a confirmation. Gmail
+  // label changes and calendar create/edit/delete act on the user's own
+  // account and run directly.
+  return action === "send_email" ? "user-approval" : "not-applicable";
 }
 
 export default defineTool({
