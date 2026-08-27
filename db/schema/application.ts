@@ -190,3 +190,32 @@ export const encryptedSecrets = pgTable(
     ),
   ]
 );
+
+// Web-monitoring jobs backed by an Exa Webset + Monitor. Not FK'd to workspaces:
+// a Linq principal that never signed in has no workspace row.
+export const webMonitors = pgTable(
+  "web_monitors",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    ownerPrincipalId: text("owner_principal_id").notNull(),
+    authenticator: text("authenticator").notNull(),
+    issuer: text("issuer"),
+    linqThread: text("linq_thread"),
+    linqThreadId: text("linq_thread_id"),
+    ownerHandle: text("owner_handle"),
+    query: text("query").notNull(),
+    exaWebsetId: text("exa_webset_id").notNull(),
+    exaMonitorId: text("exa_monitor_id").notNull(),
+    seenItemIds: text("seen_item_ids").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("web_monitors_workspace_idx").on(
+      table.workspaceId,
+      table.createdAt.desc().nullsFirst()
+    ),
+    index("web_monitors_exa_webset_idx").on(table.exaWebsetId),
+    index("web_monitors_exa_monitor_idx").on(table.exaMonitorId),
+  ]
+);
