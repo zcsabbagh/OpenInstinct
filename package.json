@@ -4,6 +4,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.44",
     "@base-ui/react": "^1.7.0",
+    "@elevenlabs/elevenlabs-js": "^2.65.0",
     "@neondatabase/serverless": "^1.1.0",
     "@onkernel/eve-extension": "^0.1.4",
     "@onkernel/sdk": "^0.96.0",
