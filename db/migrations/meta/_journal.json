@@ -15,6 +15,13 @@
       "when": 1787859519370,
       "tag": "0001_better-auth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787874631517,
+      "tag": "0002_workable_piledriver",
+      "breakpoints": true
     }
   ]
 }

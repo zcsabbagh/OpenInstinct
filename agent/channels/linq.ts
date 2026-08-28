@@ -192,6 +192,10 @@ export default linqChannel({
         attributes: {
           ...auth.attributes,
           workspaceId: scope.workspaceId,
+          // Captured so background jobs (web monitors, schedules) can deliver a
+          // proactive message back to this iMessage conversation later.
+          linqThread: JSON.stringify(context.thread),
+          ownerHandle: typeof authorUserName === "string" ? authorUserName : "",
         },
         principalId,
       },
