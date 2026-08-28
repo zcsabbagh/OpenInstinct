@@ -5,6 +5,10 @@ import { listVaultItems, readVaultItem } from "@/db/services/vault";
 import { scopeFromPrincipal, type AccessScope } from "@/lib/access-scope";
 import { env } from "@/lib/env";
 import type { VaultItemKind } from "@/lib/manager";
+import {
+  formatAddressSingleLine,
+  parseAddressSecret,
+} from "@/lib/manager/address";
 import { parsePaymentCardSecret } from "@/lib/manager/payment-card";
 import { readSecret } from "@/lib/manager/server/secret-store";
 import { requireOwnedBrowserSession } from "@/agent/extensions/kernel/browser-runtime";
@@ -20,6 +24,12 @@ const vaultAutofillFieldSchema = z.enum([
   "cvc",
   "billing_postal_code",
   "address",
+  "address_line1",
+  "address_line2",
+  "address_city",
+  "address_region",
+  "address_postal_code",
+  "address_country",
   "phone",
   "identity",
   "token",
@@ -54,7 +64,7 @@ const outputSchema = z.object({
 
 export default defineTool({
   description:
-    "Fill supported saved fields in the active browser directly from an opaque local-vault handle without requesting another approval. Valid field names are username, password, cardholder_name, card_number, expiration, expiration_month, expiration_year, cvc, billing_postal_code, address, phone, identity, and token. Never invent field names. Secret values are read inside trusted device code and entered with Chrome-native card autofill when possible, then verified keyboard entry for unsupported or masked controls. Values and acceptance checks are never returned to the model. Inspect the page first, pass the exact current origin, browser session ID, and precise CSS selectors. Never use this to expose, inspect, or copy a secret.",
+    "Fill supported saved fields in the active browser directly from an opaque local-vault handle without requesting another approval. Valid field names are username, password, cardholder_name, card_number, expiration, expiration_month, expiration_year, cvc, billing_postal_code, address, address_line1, address_line2, address_city, address_region, address_postal_code, address_country, phone, identity, and token. Use the single combined address field for a form with one address input, or the address_* fields for a form with separate street/city/region/postal/country inputs - both resolve from the same saved address item. Never invent field names. Secret values are read inside trusted device code and entered with Chrome-native card autofill when possible, then verified keyboard entry for unsupported or masked controls. Values and acceptance checks are never returned to the model. Inspect the page first, pass the exact current origin, browser session ID, and precise CSS selectors. Never use this to expose, inspect, or copy a secret.",
   inputSchema: vaultAutofillRequestSchema,
   outputSchema,
   async execute(input, context) {
@@ -411,9 +421,19 @@ function vaultValues(
       values.set("billing_postal_code", card.billingPostalCode);
       break;
     }
-    case "address":
-      values.set("address", secret);
+    case "address": {
+      const address = parseAddressSecret(secret);
+      values.set("address", formatAddressSingleLine(address));
+      if (address.line1) values.set("address_line1", address.line1);
+      if (address.line2) values.set("address_line2", address.line2);
+      if (address.city) values.set("address_city", address.city);
+      if (address.region) values.set("address_region", address.region);
+      if (address.postalCode) {
+        values.set("address_postal_code", address.postalCode);
+      }
+      if (address.country) values.set("address_country", address.country);
       break;
+    }
     case "phone":
       values.set("phone", secret);
       break;

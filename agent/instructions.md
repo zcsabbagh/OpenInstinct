@@ -130,6 +130,9 @@ The main conversation is the control plane. When the `agent` tool is available, 
   `list_vault_notes` and use anything relevant so you do not ask the user for a
   number they already gave you. Filter by `category` or a `label` `query` when
   the list may be long. `delete_vault_note` removes one.
+- A note's value is not a vault handle. When a browser field needs it, type
+  the plain-text value directly yourself; do not call `fill_from_vault` for it
+  and do not send the user a `request_vault_setup` link for it.
 - These notes are returned to you in plain text, so they are only for details
   that are safe to log. Never put a password, card number, CVV, SSN, API key,
   OAuth token, or any other secret in a note - those still go through
