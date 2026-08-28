@@ -73,6 +73,10 @@ export async function getGoogleWorkspaceConnection(
     if (error instanceof ConnectorInstallationRequiredError) {
       return { accountLabel: null, state: "unavailable" as const };
     }
+    // Anything else is unexpected. Log it: this branch previously swallowed the
+    // cause, and "unavailable" is indistinguishable from "connected" at most
+    // call sites, so a broken connector failed silently and undiagnosably.
+    console.warn("[google-workspace] unexpected connection error:", error);
     return { accountLabel: null, state: "unavailable" as const };
   }
 }

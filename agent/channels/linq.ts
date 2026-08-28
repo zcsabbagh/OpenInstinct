@@ -153,9 +153,10 @@ export type GoogleIntroOutcome = "connected" | "sent" | "failed" | "skipped";
 
 // Posts the four-message first-contact sequence. The Google sign-in prompt
 // and link (messages 3 and 4) are only attempted when Google Workspace is
-// "disconnected" - a verified/connected user isn't told to sign in again, and
-// an "unavailable" connector (not installed, or an unexpected error) stays
-// silent here just like the later disconnected-only prompt below.
+// Only a genuinely connected account skips the sign-in ask. An "unavailable"
+// connector still gets the attempt: link generation will throw and the user
+// sees GOOGLE_LINK_FAILED_COPY, which is far better than a silently truncated
+// two-bubble intro that reads as if Google were never part of the product.
 export async function sendIntroSequence(
   context: LinqInboundMessageContext,
   googleWorkspaceState: GoogleWorkspaceState,
@@ -166,7 +167,6 @@ export async function sendIntroSequence(
   }
 
   if (googleWorkspaceState === "connected") return "connected";
-  if (googleWorkspaceState !== "disconnected") return "skipped";
 
   await context.thread.post({ markdown: GOOGLE_SIGN_IN_BUBBLE });
 

@@ -60,13 +60,22 @@ describe("sendIntroSequence", () => {
     expect(postedBubbles(post)).toHaveLength(2);
   });
 
-  it("stays silent about Google when the connector is unavailable", async () => {
+  it("still tries the link when the connector is unavailable, rather than truncating the intro", async () => {
+    // A broken connector used to be treated exactly like an already-connected
+    // account: bubbles 3 and 4 were dropped and the user got a two-bubble intro
+    // that never mentioned Google, with nothing logged. Attempting it means the
+    // failure surfaces as GOOGLE_LINK_FAILED_COPY instead of as silence.
+    mocks.startGoogleWorkspaceAuthorization.mockRejectedValue(
+      new Error("connector unavailable")
+    );
     const { context, post } = fakeContext();
     const outcome = await sendIntroSequence(context, "unavailable", scope);
 
-    expect(outcome).toBe("skipped");
-    expect(mocks.startGoogleWorkspaceAuthorization).not.toHaveBeenCalled();
-    expect(postedBubbles(post)).toHaveLength(2);
+    expect(outcome).toBe("failed");
+    expect(mocks.startGoogleWorkspaceAuthorization).toHaveBeenCalled();
+    const bubbles = postedBubbles(post);
+    expect(bubbles).toHaveLength(4);
+    expect(bubbles.at(-1)).toContain("temporarily unavailable");
   });
 
   it("sends the authorization link as its own bubble, with nothing else on it", async () => {
