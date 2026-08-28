@@ -328,19 +328,11 @@ export default linqChannel({
       // send it again.
       if (googleOutcome === "sent") claimOnboardingPrompt(scope.workspaceId);
 
-      const googleIntroContext: Record<GoogleIntroOutcome, string> = {
-        connected:
-          "Google Workspace is already connected, so the intro skipped the sign-in prompt and link entirely.",
-        sent: "The fourth message was the Google Workspace authorization link (good for 10 minutes). Do not repeat the link; respond naturally to their message.",
-        failed:
-          "A sign-in prompt was sent, but the Google Workspace authorization link failed to generate, so the user was told sign-in is temporarily unavailable instead of getting a link. Do not claim that Google is connected or that a link was sent.",
-        skipped:
-          "Google Workspace onboarding was not brought up because it is temporarily unavailable. Do not claim that Google is connected.",
-      };
-
-      onboardingContext.push(
-        `This is the user's very first message. A staged intro was just sent as separate bubbles: (1) what you can do - booking flights, ordering things, dinner reservations, reminders, and monitoring the web for concert tickets, (2) that you never see their passwords and never forget anything. ${googleIntroContext[googleOutcome]} Do not repeat any of that intro copy. Respond to what they actually said.`
-      );
+      // The intro is the whole first turn. Dropping the message here stops the
+      // model from also answering "Hi mouse" with a fifth bubble underneath a
+      // sequence that already ends by asking the user to do something. Their
+      // next message gets a normal reply.
+      return null;
     } else if (googleWorkspace.state === "disconnected") {
       if (claimOnboardingPrompt(scope.workspaceId)) {
         try {
