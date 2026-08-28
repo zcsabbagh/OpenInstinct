@@ -5,7 +5,8 @@ import { env } from "@/lib/env";
 // Docs: https://exa.ai/docs/websets/api-guide
 
 const WEBSETS_BASE = "https://api.exa.ai/websets/v0";
-const WEBHOOKS_BASE = "https://api.exa.ai/v0";
+// Webhooks are part of the Websets API - the bare /v0/webhooks path 404s.
+const WEBHOOKS_BASE = WEBSETS_BASE;
 
 function requireKey(): string {
   const key = env.EXA_API_KEY;
