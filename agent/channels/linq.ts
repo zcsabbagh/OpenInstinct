@@ -1,5 +1,4 @@
 /* oxlint-disable typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-argument, typescript/no-unsafe-type-assertion -- Eve's Linq adapter exposes the thread and message through a transitive Chat SDK type; TypeScript still checks this contextual handler. */
-import { connectLinqCredentials } from "@vercel/connect/eve";
 import {
   defaultLinqAuth,
   type LinqInboundMessageContext,
@@ -9,7 +8,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { accessScopeForUser, type AccessScope } from "@/lib/access-scope";
 import { claimOnce } from "@/lib/durable-state";
-import { env, inviteGateEnabled } from "@/lib/env";
+import { inviteGateEnabled } from "@/lib/env";
 import { syncGoogleCalendarTimezoneIfDue } from "@/lib/google-workspace/calendar-timezone";
 import {
   getGoogleWorkspaceConnection,
@@ -20,7 +19,7 @@ import {
   isHandleInvited,
   workspaceHasActivity,
 } from "@/lib/invites";
-import { LINQ_CONNECTOR } from "@/lib/linq";
+import { linqCredentials } from "@/lib/linq";
 import { buildGoogleConnectNotifyUrl } from "@/lib/google-connect-notify";
 import { saveDurableLinqTarget } from "@/lib/linq-target";
 import { normalizeAuthPhoneNumber } from "@/lib/auth/phone-number";
@@ -218,13 +217,7 @@ async function shouldBlockUninvited(input: {
 }
 
 export default linqChannel({
-  credentials:
-    env.LINQ_API_KEY && env.LINQ_WEBHOOK_SECRET
-      ? {
-          apiKey: env.LINQ_API_KEY,
-          signingSecret: env.LINQ_WEBHOOK_SECRET,
-        }
-      : connectLinqCredentials(LINQ_CONNECTOR),
+  credentials: linqCredentials(),
   async onMessage(context, message) {
     if (message.author.isBot) return null;
 
@@ -419,6 +412,11 @@ export default linqChannel({
           // proactive message back to this iMessage conversation later.
           linqThread: JSON.stringify(context.thread),
           ownerHandle: typeof authorUserName === "string" ? authorUserName : "",
+          // Captured so react_to_message can tapback the message that started
+          // this turn without the model having to track or pass an id. Scoped
+          // to this session's auth only - not part of the durable per-workspace
+          // target saved above, which would go stale across turns.
+          linqMessageId: messageId ?? "",
         },
         principalId,
       },
