@@ -35,6 +35,13 @@ export const env = createEnv({
     // it the button opens Messages with no recipient.
     LINQ_PHONE_NUMBER: optionalValue,
     LINQ_WEBHOOK_SECRET: optionalValue,
+    // iCloud share link for the "Tell Mouse" Apple Shortcut (Record Audio ->
+    // Send Message). Can only be produced by the Shortcuts app signing a
+    // shortcut on a real device, so it can't be generated here - build the
+    // shortcut once, then Shortcuts app > (...) on it > Share > Copy iCloud
+    // Link. Optional: without it, send_shortcut_setup falls back to texting
+    // manual build steps instead of a link.
+    MOUSE_SHORTCUT_URL: optionalValue,
     // Front-door invite gate. Unset or anything other than "true" leaves the
     // gate open (fail-open) so the owner is never locked out.
     INVITE_GATE_ENABLED: optionalValue,
