@@ -2,6 +2,7 @@
 
 import { KeyRoundIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
+import { BackToIMessage } from "@/app/_components/back-to-imessage";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,10 +49,20 @@ const categories = [
 
 export function VaultManager({
   initialSetup,
+  returnPhoneNumber,
 }: {
   readonly initialSetup?: Extract<ManagerSetupRequest, { target: "vault" }>;
+  readonly returnPhoneNumber?: string;
 }) {
   const { busy, error, mutate, snapshot } = useManager();
+  // Only when Mouse sent them here for a specific item: a save then completes
+  // the errand it asked for, and the next thing they want is the thread.
+  const [savedForSetup, setSavedForSetup] = useState(false);
+  const submit = async (mutation: ManagerMutation) => {
+    const saved = await mutate(mutation);
+    if (saved && initialSetup) setSavedForSetup(true);
+    return saved;
+  };
   const legacyItems =
     snapshot?.vaultItems.filter(
       (item) => item.kind === "identity" || item.kind === "token"
@@ -60,6 +71,19 @@ export function VaultManager({
   return (
     <main className="flex min-w-0 flex-col gap-8">
       <h1 className="sr-only">Vault</h1>
+
+      {savedForSetup ? (
+        <section className="space-y-3 rounded-lg border border-border/60 bg-muted/40 px-4 py-4">
+          <div className="space-y-1">
+            <h2 className="type-section-title">Saved</h2>
+            <p className="type-body text-muted-foreground">
+              Mouse can use it now, and never sees the value. Head back to the
+              thread and it will keep going.
+            </p>
+          </div>
+          <BackToIMessage phoneNumber={returnPhoneNumber} />
+        </section>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -82,7 +106,7 @@ export function VaultManager({
           }
           key={category.kind}
           onDelete={mutate}
-          onSubmit={mutate}
+          onSubmit={submit}
           {...category}
         />
       ))}

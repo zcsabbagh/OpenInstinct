@@ -30,6 +30,10 @@ export const env = createEnv({
     ELEVEN_API_KEY: optionalValue,
     MODEL_SMOKE_SECRET: optionalValue,
     LINQ_API_KEY: optionalValue,
+    // The Linq line users text. Used to deep-link back into the iMessage
+    // thread after they finish on a page we sent them to. Optional: without
+    // it the button opens Messages with no recipient.
+    LINQ_PHONE_NUMBER: optionalValue,
     LINQ_WEBHOOK_SECRET: optionalValue,
     // Front-door invite gate. Unset or anything other than "true" leaves the
     // gate open (fail-open) so the owner is never locked out.
