@@ -49,6 +49,21 @@ export async function applyManagerMutation(
   return readManagerSnapshot(scope);
 }
 
+/**
+ * Adds one vault item for `scope`. Exported separately from
+ * `applyManagerMutation` so the token-authorized write path
+ * (`app/api/vault-link/route.ts`) can perform exactly this one mutation -
+ * never `readManagerSnapshot`, `vault.delete`, or `model.select` - without
+ * going through the session-scoped `/api/manager` handler.
+ */
+export async function createTokenScopedVaultItem(
+  scope: AccessScope,
+  input: Extract<ManagerMutation, { action: "vault.create" }>["input"]
+) {
+  await ensureScope(scope);
+  await createVaultItem(scope, input);
+}
+
 async function createVaultItem(
   scope: AccessScope,
   input: Extract<ManagerMutation, { action: "vault.create" }>["input"]

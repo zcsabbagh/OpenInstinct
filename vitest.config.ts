@@ -21,6 +21,7 @@ const pgliteBackedTestFiles = [
   "tests/services.test.ts",
   "tests/invites.test.ts",
   "tests/vault-notes.test.ts",
+  "tests/vault-link.test.ts",
   "tests/web-monitor.test.ts",
   "tests/database-migration.test.ts",
   "tests/timezone.test.ts",

@@ -12,7 +12,7 @@ export const vaultItemKindSchema = z.enum([
   "token",
 ]);
 
-const vaultSetupKindSchema = vaultItemKindSchema.extract([
+export const vaultSetupKindSchema = vaultItemKindSchema.extract([
   "login",
   "payment",
   "address",
@@ -106,17 +106,34 @@ export type ManagerMutation = z.infer<typeof managerMutationSchema>;
 export type ManagerSetupRequest = z.infer<typeof managerSetupRequestSchema>;
 export type ManagerSnapshot = z.infer<typeof managerSnapshotSchema>;
 export type VaultItemKind = z.infer<typeof vaultItemKindSchema>;
+export type VaultSetupKind = z.infer<typeof vaultSetupKindSchema>;
 
-export function createManagerSetupUrl(
-  baseUrl: string,
-  request: ManagerSetupRequest
-) {
+/**
+ * Builds the link texted to the user. It carries only the opaque, single-use
+ * token minted by `mintVaultLinkToken` (see
+ * `lib/manager/server/vault-link.ts`) - no kind, label, or account leak into
+ * the URL itself. This stays a pure, DB-free function so it is cheap to unit
+ * test; minting the token is the part that touches storage.
+ */
+export function createManagerSetupUrl(baseUrl: string, token: string) {
   const url = new URL("/vault", baseUrl);
-  url.searchParams.set("setup", request.target);
-  if (request.account) url.searchParams.set("account", request.account);
-  if (request.label) url.searchParams.set("label", request.label);
-  url.searchParams.set("kind", request.kind);
+  url.searchParams.set("token", token);
   return url.toString();
+}
+
+/**
+ * Shared same-origin guard for both manager write endpoints
+ * (`/api/manager` and `/api/vault-link`): true when `request` is a
+ * cross-origin write that must be rejected.
+ */
+export function crossOriginMutationDenied(request: Request) {
+  return !isAllowedMutationOrigin({
+    forwardedHost: request.headers.get("x-forwarded-host"),
+    forwardedProto: request.headers.get("x-forwarded-proto"),
+    host: request.headers.get("host"),
+    origin: request.headers.get("origin"),
+    requestUrl: request.url,
+  });
 }
 
 export function isAllowedMutationOrigin({

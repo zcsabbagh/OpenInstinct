@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import type { ManagerMutation, ManagerSnapshot } from "@/lib/manager";
 import { managerSnapshotSchema } from "@/lib/manager";
-
-const apiErrorSchema = z.object({ error: z.string() });
-const errorSchema = z.instanceof(Error);
+import { apiErrorMessage, caughtErrorMessage } from "./api-error";
 
 export function useManager() {
   const [snapshot, setSnapshot] = useState<ManagerSnapshot>();
@@ -21,17 +19,13 @@ export function useManager() {
         const response = await fetch("/api/manager", { cache: "no-store" });
         const body = z.unknown().parse(await response.json());
         if (!response.ok) {
-          throw new Error(
-            apiErrorSchema.safeParse(body).data?.error ??
-              "Manager request failed."
-          );
+          throw new Error(apiErrorMessage(body) ?? "Manager request failed.");
         }
         if (active) setSnapshot(managerSnapshotSchema.parse(body));
       } catch (refreshError) {
         if (active) {
           setError(
-            errorSchema.safeParse(refreshError).data?.message ??
-              "Manager request failed."
+            caughtErrorMessage(refreshError) ?? "Manager request failed."
           );
         }
       }
@@ -55,18 +49,12 @@ export function useManager() {
       });
       const body = z.unknown().parse(await response.json());
       if (!response.ok) {
-        throw new Error(
-          apiErrorSchema.safeParse(body).data?.error ??
-            "Manager request failed."
-        );
+        throw new Error(apiErrorMessage(body) ?? "Manager request failed.");
       }
       setSnapshot(managerSnapshotSchema.parse(body));
       return true;
     } catch (mutationError) {
-      setError(
-        errorSchema.safeParse(mutationError).data?.message ??
-          "Manager request failed."
-      );
+      setError(caughtErrorMessage(mutationError) ?? "Manager request failed.");
       return false;
     } finally {
       setBusy(false);

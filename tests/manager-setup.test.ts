@@ -30,21 +30,18 @@ describe("self-hosted manager", () => {
       }).success
     ).toBe(false);
 
+    // createManagerSetupUrl only wraps the opaque token minted by
+    // mintVaultLinkToken (lib/manager/server/vault-link.ts) - it never
+    // carries kind/label/account itself, so it stays a pure, DB-free
+    // function. See tests/vault-link.test.ts for the token's own
+    // mint/verify/expire/scope behavior.
     const url = new URL(
-      createManagerSetupUrl("https://assistant.example.com", {
-        account: "person@example.com",
-        kind: "login",
-        label: "Personal login",
-        target: "vault",
-      })
+      createManagerSetupUrl("https://assistant.example.com", "a-token")
     );
 
     expect(url.pathname).toBe("/vault");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      account: "person@example.com",
-      kind: "login",
-      label: "Personal login",
-      setup: "vault",
+      token: "a-token",
     });
   });
 
