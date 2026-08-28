@@ -23,6 +23,7 @@ const pgliteBackedTestFiles = [
   "tests/vault-notes.test.ts",
   "tests/web-monitor.test.ts",
   "tests/database-migration.test.ts",
+  "tests/timezone.test.ts",
 ];
 
 export default defineConfig({
