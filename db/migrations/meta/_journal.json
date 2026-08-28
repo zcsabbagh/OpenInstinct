@@ -50,6 +50,13 @@
       "when": 1787880418611,
       "tag": "0006_heavy_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787889478034,
+      "tag": "0007_melodic_exiles",
+      "breakpoints": true
     }
   ]
 }

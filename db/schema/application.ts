@@ -291,6 +291,32 @@ export const schedules = pgTable(
   ]
 );
 
+// Durable, namespaced key-value seam for chat-channel bookkeeping that would
+// otherwise live only in an in-memory Chat SDK state adapter (see
+// `lib/durable-state.ts`). `agent/channels/linq.ts` claims one row per inbound
+// Linq message id so a redelivered webhook is not handled twice. The
+// namespace/key/value shape is intentionally generic so a later change can
+// reuse this same table for a per-workspace human-in-the-loop pending-request
+// map ({requestId, sessionId, threadId}) without a schema change. Not FK'd to
+// workspaces: a claim (like inbound dedup) may have no workspace at claim time.
+export const channelState = pgTable(
+  "channel_state",
+  {
+    namespace: text("namespace").notNull(),
+    key: text("key").notNull(),
+    value: text("value"),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.namespace, table.key],
+      name: "channel_state_pkey",
+    }),
+    index("channel_state_expires_idx").on(table.expiresAt),
+  ]
+);
+
 // Non-secret personal identifiers the user routinely says out loud: frequent
 // flyer / loyalty numbers, Known Traveler Number, membership IDs, seat and meal
 // preferences. Unlike `encrypted_secrets`, these rows ARE returned to the model
