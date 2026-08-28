@@ -1,9 +1,15 @@
 /**
- * Copy for the "Tell Mouse" Apple Shortcut offer: a two-action shortcut
- * (Record Audio -> Send Message) that lets the user fire a voice note at
- * Mouse from the Action Button, Back Tap, or a Home Screen icon instead of
- * opening the thread by hand. See the design doc this shipped from for the
- * full rationale; the short version lives in the two rules below.
+ * Copy for the "Voice Note To Mouse" Apple Shortcut offer: a two-action
+ * shortcut (Record Audio -> Send Message) that lets the user fire a voice
+ * note at Mouse from the Action Button, Back Tap, or a Home Screen icon
+ * instead of opening the thread by hand. See the design doc this shipped
+ * from for the full rationale; the short version lives in the two rules
+ * below.
+ *
+ * The shortcut's exact name, "Voice Note To Mouse" (capitalized as shown),
+ * comes from the published shortcut's own iCloud record - it's what the
+ * user sees in the Shortcuts app, the Action Button picker, and would say
+ * to Siri, so every reference to it here has to match verbatim.
  *
  * The iCloud share link (`https://www.icloud.com/shortcuts/<uuid>`) can only
  * be produced by the Shortcuts app signing a real shortcut on a real device -
@@ -19,19 +25,20 @@
  */
 import { toDialableNumber } from "@/lib/imessage-link";
 
+const SHORTCUT_NAME = "Voice Note To Mouse";
+
 const TRIGGER_STEPS = [
-  "• Action Button: Settings, Action Button, swipe to Shortcut, choose Tell Mouse",
-  "• no Action Button: Settings, Accessibility, Touch, Back Tap, Double Tap, choose Tell Mouse",
+  `• Action Button: Settings, Action Button, swipe to Shortcut, choose ${SHORTCUT_NAME}`,
+  `• no Action Button: Settings, Accessibility, Touch, Back Tap, Double Tap, choose ${SHORTCUT_NAME}`,
   "• or add it to your home screen straight from the share sheet",
 ] as const;
 
-const SIRI_CAVEAT =
-  "skip Hey Siri for this one - Record Audio has a long-standing bug where it freezes at 0:00 when Siri starts it. try it if you're curious, but use the button if it hangs";
+const SIRI_CAVEAT = `skip saying "hey siri, ${SHORTCUT_NAME.toLowerCase()}" for now - Record Audio has a long-standing bug where it freezes at 0:00 when Siri starts it. worth trying on your phone, but use the button if it hangs`;
 
 /** Ready-to-send copy when a signed shortcut link is configured. */
 export function buildConfiguredShortcutMessage(shortcutUrl: string): string {
   return [
-    "want a button for me? tap this to grab it - it starts recording the second you press it and sends the voice note here the moment you tap to stop",
+    `want a button for me? tap this to grab ${SHORTCUT_NAME} - it starts recording the second you press it and sends the voice note here the moment you tap to stop`,
     shortcutUrl,
     "open it, tap Get Shortcut, then pick how to fire it",
     ...TRIGGER_STEPS,
@@ -57,7 +64,7 @@ export function buildManualShortcutMessage(
     "open Shortcuts, tap the + top right, then add these two",
     "• Record Audio - Start Recording: Immediately, Finish Recording: On Tap",
     `• Send Message - Message: Recorded Audio (the variable Record Audio hands you), ${recipients}, then open Show More and turn Show When Run off`,
-    "name it Tell Mouse",
+    `name it ${SHORTCUT_NAME}`,
     "now pick how to fire it",
     ...TRIGGER_STEPS,
     SIRI_CAVEAT,
