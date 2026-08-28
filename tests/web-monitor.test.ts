@@ -2,7 +2,15 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type { Database } from "@/db";
 import type { ExaResult, ExaSearchOptions } from "@/lib/exa";
 import type * as exaModule from "@/lib/exa";
@@ -25,13 +33,55 @@ const MIGRATIONS = [
   "0006_heavy_centennial.sql",
 ];
 
-const databases: PGlite[] = [];
+// Booting PGlite and replaying migrations is the expensive part of this file
+// (roughly 1s each, dwarfing every actual assertion). Every test in this
+// file exercises the same migrated schema, so we pay that cost once for the
+// whole file instead of once per test. Isolation between tests then comes
+// from truncating every table after each test (see `afterEach` below) rather
+// than from a fresh database, so tests still cannot see each other's rows
+// and the file stays order-independent.
+let client: PGlite;
+let database: Database;
+
+beforeAll(async () => {
+  client = new PGlite();
+  for (const name of MIGRATIONS) {
+    const sqlText = await readFile(
+      new URL(`../db/migrations/${name}`, import.meta.url),
+      "utf8"
+    );
+    for (const statement of sqlText.split("--> statement-breakpoint")) {
+      if (statement.trim()) await client.exec(statement);
+    }
+  }
+
+  const pgliteDatabase = drizzle(client, { schema });
+  Object.assign(pgliteDatabase, {
+    batch: async (queries: readonly { execute(): Promise<unknown> }[]) =>
+      await Promise.all(queries.map(async (query) => await query.execute())),
+  });
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- adapter-compatible integration test double
+  database = pgliteDatabase as unknown as Database;
+});
+
+afterAll(async () => {
+  await client.close();
+});
 
 afterEach(async () => {
   vi.doUnmock("@/db");
   vi.doUnmock("@/lib/exa");
   vi.resetModules();
-  await Promise.all(databases.splice(0).map((database) => database.close()));
+  // Reset every table the migrations created rather than hardcoding just
+  // `web_monitors`, so isolation stays genuine even if a future test in this
+  // file starts touching another table.
+  const tables = await client.query<{ tablename: string }>(
+    "select tablename from pg_tables where schemaname = 'public'"
+  );
+  if (tables.rows.length > 0) {
+    const names = tables.rows.map((row) => `"${row.tablename}"`).join(", ");
+    await client.exec(`truncate table ${names} cascade`);
+  }
 });
 
 function owner(workspaceId: string): LinqJobOwner {
@@ -298,25 +348,6 @@ async function getRow(database: Database, id: string) {
 }
 
 async function withDatabase(exaSearchMock: ExaSearchFn) {
-  const client = new PGlite();
-  databases.push(client);
-  for (const name of MIGRATIONS) {
-    const sqlText = await readFile(
-      new URL(`../db/migrations/${name}`, import.meta.url),
-      "utf8"
-    );
-    for (const statement of sqlText.split("--> statement-breakpoint")) {
-      if (statement.trim()) await client.exec(statement);
-    }
-  }
-
-  const pgliteDatabase = drizzle(client, { schema });
-  Object.assign(pgliteDatabase, {
-    batch: async (queries: readonly { execute(): Promise<unknown> }[]) =>
-      await Promise.all(queries.map(async (query) => await query.execute())),
-  });
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- adapter-compatible integration test double
-  const database = pgliteDatabase as unknown as Database;
   vi.doMock("@/db", () => ({ ...schema, db: database }));
   vi.doMock("@/lib/exa", async () => {
     const actual = await vi.importActual<typeof exaModule>("@/lib/exa");
