@@ -7,7 +7,7 @@ import {
 } from "eve/channels/linq";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { accessScopeForUser } from "@/lib/access-scope";
+import { accessScopeForUser, type AccessScope } from "@/lib/access-scope";
 import { claimOnce } from "@/lib/durable-state";
 import { env, inviteGateEnabled } from "@/lib/env";
 import {
@@ -111,7 +111,10 @@ const verifiedPhoneUserSchema = z.object({
 const ONBOARDING_PROMPT_TTL_MS = 60 * 60 * 1000;
 const recentOnboardingPrompts = new Map<string, number>();
 
-function claimOnboardingPrompt(key: string): boolean {
+// Exported so the throttle that keeps the first-contact link send and the
+// later disconnected-branch prompt from double-sending can be tested
+// directly.
+export function claimOnboardingPrompt(key: string): boolean {
   const now = Date.now();
   const last = recentOnboardingPrompts.get(key);
   if (last !== undefined && now - last < ONBOARDING_PROMPT_TTL_MS) return false;
@@ -125,32 +128,59 @@ function claimOnboardingPrompt(key: string): boolean {
   return true;
 }
 
-// iMessage expressive-send / screen effects (confetti, fireworks, celebration)
-// are not reachable through the Linq channel: the Linq Chat SDK adapter only
-// emits `text` and `media` message parts, and `thread.post` has no effect
-// option on this path. (They exist in eve, but only via the Photon iMessage
-// adapter's `sendEffect`.) So the celebration is a standalone "You're in"
-// bubble with an emoji.
-const INTRO_BUBBLES = [
-  "You're in 🎉",
-  [
-    "here's what i've got:",
-    "- my own computer. anything you can do on the web, i can do.",
-    "- a password manager. i sign into your accounts without ever seeing the passwords.",
-    "- memory that sticks. i won't have forgotten this by next month.",
-  ].join("\n"),
-  [
-    "treat me like a person with a computer and a phone. most people don't figure out what to hand off until something's already bugging them.",
-    "",
-    "what's your first name?",
-  ].join("\n"),
-];
+// The first two bubbles are always sent as-is. The third (an invitation to
+// connect Google) and fourth (the authorization link) are conditional: they
+// are skipped when Google Workspace is already connected, and the fourth is
+// replaced by a fallback message if link generation fails.
+export const INTRO_BUBBLES = [
+  "I can do lots of things: book flights ✈️, order things 📦, make dinner reservations 📅, send you reminders 🧠, monitor the web for concert tickets 🎙️",
+  "I can do all of these things without ever seeing your passwords, so they stay fully private. Best of all, I never forget anything.",
+] as const;
 
-async function sendIntroSequence(
-  context: LinqInboundMessageContext
-): Promise<void> {
+export const GOOGLE_SIGN_IN_BUBBLE =
+  "First, let's sign into your Google account, which will let me monitor your email for important information, and help you schedule events.";
+
+const GOOGLE_LINK_UNAVAILABLE_BUBBLE =
+  "Google sign-in is temporarily unavailable - I'll send the link as soon as it's back.";
+
+type GoogleWorkspaceState = "connected" | "disconnected" | "unavailable";
+
+export type GoogleIntroOutcome = "connected" | "sent" | "failed" | "skipped";
+
+// Posts the four-message first-contact sequence. The Google sign-in prompt
+// and link (messages 3 and 4) are only attempted when Google Workspace is
+// "disconnected" - a verified/connected user isn't told to sign in again, and
+// an "unavailable" connector (not installed, or an unexpected error) stays
+// silent here just like the later disconnected-only prompt below.
+export async function sendIntroSequence(
+  context: LinqInboundMessageContext,
+  googleWorkspaceState: GoogleWorkspaceState,
+  scope: AccessScope
+): Promise<GoogleIntroOutcome> {
   for (const bubble of INTRO_BUBBLES) {
     await context.thread.post({ markdown: bubble });
+  }
+
+  if (googleWorkspaceState === "connected") return "connected";
+  if (googleWorkspaceState !== "disconnected") return "skipped";
+
+  await context.thread.post({ markdown: GOOGLE_SIGN_IN_BUBBLE });
+
+  try {
+    const callbackUrl = new URL("/google-connected", env.BETTER_AUTH_URL);
+    const authorizationUrl = await startGoogleWorkspaceAuthorization(
+      scope,
+      callbackUrl.toString()
+    );
+    // Keep this bubble containing only the URL and nothing else: Linq
+    // flattens markdown to plain text for iMessage and drops the newlines,
+    // so anything trailing the link gets glued into its path and the
+    // authorization request 404s.
+    await context.thread.post({ markdown: authorizationUrl });
+    return "sent";
+  } catch {
+    await context.thread.post({ markdown: GOOGLE_LINK_UNAVAILABLE_BUBBLE });
+    return "failed";
   }
 }
 
@@ -263,9 +293,28 @@ export default linqChannel({
 
     const justIntroduced = await claimFirstContact(scope.workspaceId);
     if (justIntroduced) {
-      await sendIntroSequence(context);
+      const googleOutcome = await sendIntroSequence(
+        context,
+        googleWorkspace.state,
+        scope
+      );
+      // A successfully sent link claims the same throttle the later
+      // disconnected-branch prompt uses, so the very next message doesn't
+      // send it again.
+      if (googleOutcome === "sent") claimOnboardingPrompt(scope.workspaceId);
+
+      const googleIntroContext: Record<GoogleIntroOutcome, string> = {
+        connected:
+          "Google Workspace is already connected, so the intro skipped the sign-in prompt and link entirely.",
+        sent: "The fourth message was the Google Workspace authorization link (good for 10 minutes). Do not repeat the link; respond naturally to their message.",
+        failed:
+          "A sign-in prompt was sent, but the Google Workspace authorization link failed to generate, so the user was told sign-in is temporarily unavailable instead of getting a link. Do not claim that Google is connected or that a link was sent.",
+        skipped:
+          "Google Workspace onboarding was not brought up because it is temporarily unavailable. Do not claim that Google is connected.",
+      };
+
       onboardingContext.push(
-        "This is the user's very first message. A staged intro was just sent as three separate bubbles: (1) a welcome, (2) what you can do - your own computer, a password manager that fills credentials without you seeing them, and durable memory, (3) a note to treat you like a person with a computer and a phone, ending by asking for their first name. Do not repeat any of that. Respond to what they actually said. If they gave a name, acknowledge it warmly and briefly and ask what they want to get done. If they ask how the credential/vault flow works, explain it the way your instructions describe. If Gmail or Calendar comes up, tell them you can connect Google Workspace and the link will come through on your next reply."
+        `This is the user's very first message. A staged intro was just sent as separate bubbles: (1) what you can do - booking flights, ordering things, dinner reservations, reminders, and monitoring the web for concert tickets, (2) that you never see their passwords and never forget anything. ${googleIntroContext[googleOutcome]} Do not repeat any of that intro copy. Respond to what they actually said.`
       );
     } else if (googleWorkspace.state === "disconnected") {
       if (claimOnboardingPrompt(scope.workspaceId)) {
