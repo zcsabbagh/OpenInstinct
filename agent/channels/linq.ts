@@ -19,6 +19,7 @@ import {
   isHandleInvited,
   workspaceHasActivity,
 } from "@/lib/invites";
+import { renderInputRequest } from "@/lib/hitl-prompt";
 import { linqCredentials } from "@/lib/linq";
 import { buildGoogleConnectNotifyUrl } from "@/lib/google-connect-notify";
 import { saveDurableLinqTarget } from "@/lib/linq-target";
@@ -218,6 +219,21 @@ async function shouldBlockUninvited(input: {
 
 export default linqChannel({
   credentials: linqCredentials(),
+  events: {
+    // eve's default Chat SDK renderer turns an input request into a Card of
+    // Buttons; the Linq adapter only emits `text` and `media` parts, so that
+    // never shows up over iMessage. Post plain text instead - one bubble per
+    // request, matching how the intro sequence posts. A reply that matches
+    // an option's id, label, or numeric index still resolves the pending
+    // request through eve's normal HITL resume path; this only changes what
+    // the user sees while deciding what to type back.
+    async "input.requested"(eventData, channel) {
+      if (!channel.thread) return;
+      for (const request of eventData.requests) {
+        await channel.thread.post({ markdown: renderInputRequest(request) });
+      }
+    },
+  },
   async onMessage(context, message) {
     if (message.author.isBot) return null;
 
