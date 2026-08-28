@@ -1,162 +1,50 @@
 import { z } from "zod";
 import { env } from "@/lib/env";
 
-// Minimal client for the Exa Websets API (websets, monitors, webhooks, items).
-// Docs: https://exa.ai/docs/websets/api-guide
+// Plain Exa Search (https://docs.exa.ai/reference/search). Pay-as-you-go, no
+// Pro plan - the Websets / Monitors API needs a paid team, so web monitoring
+// runs its own daily search on our cron instead.
 
-const WEBSETS_BASE = "https://api.exa.ai/websets/v0";
-// Webhooks are part of the Websets API - the bare /v0/webhooks path 404s.
-const WEBHOOKS_BASE = WEBSETS_BASE;
+const resultSchema = z.object({
+  id: z.string().optional(),
+  url: z.string(),
+  title: z.string().nullish(),
+  publishedDate: z.string().nullish(),
+  text: z.string().nullish(),
+});
 
-function requireKey(): string {
+const responseSchema = z.object({ results: z.array(resultSchema) });
+
+export type ExaResult = z.infer<typeof resultSchema>;
+
+export async function exaSearch(
+  query: string,
+  numResults = 10
+): Promise<ExaResult[]> {
   const key = env.EXA_API_KEY;
   if (!key) throw new Error("EXA_API_KEY is not set.");
-  return key;
-}
 
-async function exaFetch<TSchema extends z.ZodType>(
-  url: string,
-  schema: TSchema,
-  init: RequestInit = {}
-): Promise<z.infer<TSchema>> {
-  const headers = new Headers(init.headers);
-  headers.set("x-api-key", requireKey());
-  headers.set("content-type", "application/json");
+  const response = await fetch("https://api.exa.ai/search", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key },
+    body: JSON.stringify({
+      query,
+      numResults,
+      type: "auto",
+      contents: { text: { maxCharacters: 800 } },
+    }),
+  });
 
-  const response = await fetch(url, { ...init, headers });
   const text = await response.text();
-  const body: unknown = text ? JSON.parse(text) : null;
-
   if (!response.ok) {
     throw new Error(
-      `Exa ${init.method ?? "GET"} ${url} -> ${String(response.status)}: ${JSON.stringify(body).slice(0, 400)}`
+      `Exa search -> ${String(response.status)}: ${text.slice(0, 300)}`
     );
   }
-  return schema.parse(body);
+  return responseSchema.parse(JSON.parse(text) as unknown).results;
 }
 
-const websetSchema = z.object({ id: z.string() });
-const monitorSchema = z.object({
-  id: z.string(),
-  nextRunAt: z.string().nullish(),
-});
-const websetItemSchema = z.object({
-  id: z.string(),
-  properties: z
-    .object({
-      url: z.string().optional(),
-      description: z.string().optional(),
-      article: z.object({ title: z.string().optional() }).optional(),
-      researchPaper: z.object({ title: z.string().optional() }).optional(),
-      company: z.object({ name: z.string().optional() }).optional(),
-      person: z.object({ name: z.string().optional() }).optional(),
-      custom: z.object({ title: z.string().optional() }).optional(),
-    })
-    .optional(),
-});
-const itemsPageSchema = z.object({
-  data: z.array(websetItemSchema).optional(),
-  hasMore: z.boolean().optional(),
-  nextCursor: z.string().nullish(),
-});
-const webhookListSchema = z.object({
-  data: z.array(z.object({ url: z.string() })).optional(),
-});
-
-export type ExaWebsetItem = z.infer<typeof websetItemSchema>;
-
-// Websets require a search; use the same query the monitor will run.
-export function createWebset(query: string) {
-  return exaFetch(`${WEBSETS_BASE}/websets`, websetSchema, {
-    method: "POST",
-    body: JSON.stringify({ search: { query, count: 10 } }),
-  });
-}
-
-export function deleteWebset(id: string) {
-  return exaFetch(
-    `${WEBSETS_BASE}/websets/${encodeURIComponent(id)}`,
-    z.unknown(),
-    {
-      method: "DELETE",
-    }
-  );
-}
-
-// cron must be at most once daily. timezone is IANA.
-export function createDailyMonitor(input: {
-  websetId: string;
-  query: string;
-  cron: string;
-  timezone: string;
-}) {
-  return exaFetch(`${WEBSETS_BASE}/monitors`, monitorSchema, {
-    method: "POST",
-    body: JSON.stringify({
-      websetId: input.websetId,
-      cadence: { cron: input.cron, timezone: input.timezone },
-      behavior: {
-        type: "search",
-        config: { query: input.query, count: 10, behavior: "append" },
-      },
-    }),
-  });
-}
-
-export function deleteMonitor(id: string) {
-  return exaFetch(
-    `${WEBSETS_BASE}/monitors/${encodeURIComponent(id)}`,
-    z.unknown(),
-    {
-      method: "DELETE",
-    }
-  );
-}
-
-export async function listWebsetItems(
-  websetId: string
-): Promise<ExaWebsetItem[]> {
-  const items: ExaWebsetItem[] = [];
-  let cursor: string | undefined;
-  do {
-    const params = new URLSearchParams({ limit: "100" });
-    if (cursor) params.set("cursor", cursor);
-    const page = await exaFetch(
-      `${WEBSETS_BASE}/websets/${encodeURIComponent(websetId)}/items?${params.toString()}`,
-      itemsPageSchema
-    );
-    items.push(...(page.data ?? []));
-    cursor = page.hasMore ? (page.nextCursor ?? undefined) : undefined;
-  } while (cursor && items.length < 500);
-  return items;
-}
-
-export function itemTitle(item: ExaWebsetItem): string {
-  const p = item.properties;
-  return (
-    p?.article?.title ??
-    p?.researchPaper?.title ??
-    p?.company?.name ??
-    p?.person?.name ??
-    p?.custom?.title ??
-    p?.url ??
-    "result"
-  );
-}
-
-// One deployment-wide webhook. Registered lazily; identified by its URL so we
-// never create a duplicate.
-export async function ensureWebhook(url: string): Promise<void> {
-  const existing = await exaFetch(
-    `${WEBHOOKS_BASE}/webhooks`,
-    webhookListSchema
-  );
-  if ((existing.data ?? []).some((webhook) => webhook.url === url)) return;
-  await exaFetch(`${WEBHOOKS_BASE}/webhooks`, z.unknown(), {
-    method: "POST",
-    body: JSON.stringify({
-      url,
-      events: ["monitor.run.completed", "webset.search.completed"],
-    }),
-  });
+export function resultTitle(result: ExaResult): string {
+  const title = result.title?.trim();
+  return title && title.length > 0 ? title : result.url;
 }

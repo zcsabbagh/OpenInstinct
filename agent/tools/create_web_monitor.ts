@@ -20,12 +20,12 @@ export default defineTool({
   }),
   async execute({ query }, ctx) {
     const owner = resolveLinqJobOwner(ctx);
-    const { id, nextRunAt } = await createWebMonitor(owner, query);
+    const { id, nextCheckAt } = await createWebMonitor(owner, query);
     return {
       created: true,
       id,
       query,
-      firstCheck: nextRunAt,
+      nextCheck: nextCheckAt,
       cadence: "daily",
     };
   },
