@@ -24,11 +24,11 @@ import { vaultSetupKindSchema } from "..";
 // URL short, with no HMAC/signature code to get right.
 const NAMESPACE = "vault-link";
 
-// The link must stop working 5 minutes after Mouse sends it. Kept as a
-// named constant, not inlined, because 5 minutes is a product choice (see
+// The link must stop working 15 minutes after Mouse sends it. Kept as a
+// named constant, not inlined, because the window is a product choice (see
 // the tool description in agent/tools/request_vault_setup.ts) that may need
 // to change independent of the token plumbing around it.
-export const VAULT_LINK_TTL_MS = 5 * 60 * 1000;
+export const VAULT_LINK_TTL_MS = 15 * 60 * 1000;
 
 const vaultLinkPayloadSchema = z.object({
   account: z.string(),

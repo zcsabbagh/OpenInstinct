@@ -85,7 +85,7 @@ describe("vault link token", () => {
     expect(await vaultLink.peekVaultLinkToken(workspaceBToken)).toBeUndefined();
   }, 20_000);
 
-  it("expires 5 minutes after mint, enforced by the stored expiry, not the caller", async () => {
+  it("expires 15 minutes after mint, enforced by the stored expiry, not the caller", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
@@ -93,7 +93,7 @@ describe("vault link token", () => {
     const scope = { userId: "user-a", workspaceId: "workspace:a" };
     const token = await vaultLink.mintVaultLinkToken(scope, { kind: "phone" });
 
-    expect(vaultLink.VAULT_LINK_TTL_MS).toBe(5 * 60 * 1000);
+    expect(vaultLink.VAULT_LINK_TTL_MS).toBe(15 * 60 * 1000);
 
     // Still inside the window: valid.
     vi.setSystemTime(
