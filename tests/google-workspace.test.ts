@@ -35,11 +35,21 @@ describe("Google Workspace connection", () => {
     expect(z.toJSONSchema(googleWorkspaceReadInputSchema).type).toBe("object");
     expect(z.toJSONSchema(googleWorkspaceWriteInputSchema).type).toBe("object");
   });
-  it("uses one explicit full Gmail and Calendar scope set", () => {
+  it("uses one explicit Gmail, Calendar, and Contacts scope set", () => {
     expect(GOOGLE_WORKSPACE_SCOPES).not.toContain("*");
-    expect(GOOGLE_WORKSPACE_SCOPES).toContain("https://mail.google.com/");
+    // Gmail access deliberately requests the sensitive `gmail.modify` scope,
+    // not the restricted `mail.google.com` scope, which includes permanent
+    // delete. See the Gmail code: it only searches, reads, labels
+    // (batchModify), and sends — nothing that needs full mailbox access.
+    expect(GOOGLE_WORKSPACE_SCOPES).not.toContain("https://mail.google.com/");
+    expect(GOOGLE_WORKSPACE_SCOPES).toContain(
+      "https://www.googleapis.com/auth/gmail.modify"
+    );
     expect(GOOGLE_WORKSPACE_SCOPES).toContain(
       "https://www.googleapis.com/auth/calendar"
+    );
+    expect(GOOGLE_WORKSPACE_SCOPES).toContain(
+      "https://www.googleapis.com/auth/contacts.readonly"
     );
     expect(googleWorkspaceTokenParams(scope.userId)).toEqual({
       scopes: [...GOOGLE_WORKSPACE_SCOPES],
@@ -135,18 +145,52 @@ describe("Google Workspace connection", () => {
     });
   });
 
-  it("requires approval only for sending email", () => {
-    expect(googleWorkspaceWriteApproval("send_email")).toBe("user-approval");
-    expect(googleWorkspaceWriteApproval("update_email")).toBe("not-applicable");
-    expect(googleWorkspaceWriteApproval("create_calendar_event")).toBe(
+  it("requires approval for anything that reaches other people", () => {
+    expect(googleWorkspaceWriteApproval(undefined)).toBe("not-applicable");
+    expect(googleWorkspaceWriteApproval({ action: "send_email" })).toBe(
+      "user-approval"
+    );
+    expect(googleWorkspaceWriteApproval({ action: "update_email" })).toBe(
       "not-applicable"
     );
-    expect(googleWorkspaceWriteApproval("update_calendar_event")).toBe(
-      "not-applicable"
-    );
-    expect(googleWorkspaceWriteApproval("delete_calendar_event")).toBe(
-      "not-applicable"
-    );
+  });
+
+  it("gates calendar create/update on whether attendees are present", () => {
+    expect(
+      googleWorkspaceWriteApproval({ action: "create_calendar_event" })
+    ).toBe("not-applicable");
+    expect(
+      googleWorkspaceWriteApproval({
+        action: "create_calendar_event",
+        attendees: [],
+      })
+    ).toBe("not-applicable");
+    expect(
+      googleWorkspaceWriteApproval({
+        action: "create_calendar_event",
+        attendees: ["friend@example.com"],
+      })
+    ).toBe("user-approval");
+    expect(
+      googleWorkspaceWriteApproval({ action: "update_calendar_event" })
+    ).toBe("not-applicable");
+    // Adding attendees to a previously solo event must also require
+    // approval, not just events created with attendees from the start.
+    expect(
+      googleWorkspaceWriteApproval({
+        action: "update_calendar_event",
+        attendees: ["friend@example.com"],
+      })
+    ).toBe("user-approval");
+  });
+
+  it("always requires approval for calendar deletes", () => {
+    // The approval policy runs before the event is read, so it cannot see
+    // whether the event being deleted has attendees. Treat every deletion
+    // as a potential guest cancellation.
+    expect(
+      googleWorkspaceWriteApproval({ action: "delete_calendar_event" })
+    ).toBe("user-approval");
   });
 
   it("does not interpret Google FreeBusy errors as availability", () => {

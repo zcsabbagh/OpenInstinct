@@ -191,9 +191,13 @@ export async function deleteCalendarEvent(
   ctx: ToolContext,
   input: z.infer<typeof calendarEventDeleteSchema>
 ) {
+  // Explicit rather than relying on the API's undocumented default: a
+  // deletion cancels the event, and any existing attendees should see that
+  // cancellation. The write tool requires approval before every delete for
+  // exactly this reason.
   await googleWorkspaceFetch(
     ctx,
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}?sendUpdates=all`,
     z.unknown(),
     { method: "DELETE" }
   );
