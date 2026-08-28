@@ -22,6 +22,13 @@
       "when": 1787874631517,
       "tag": "0002_workable_piledriver",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787875154856,
+      "tag": "0003_spooky_enchantress",
+      "breakpoints": true
     }
   ]
 }

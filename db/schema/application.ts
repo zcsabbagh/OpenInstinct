@@ -219,3 +219,38 @@ export const webMonitors = pgTable(
     index("web_monitors_exa_monitor_idx").on(table.exaMonitorId),
   ]
 );
+
+// User-text-driven reminders and recurring nudges. `everyMinutes` null => one
+// time. The dispatcher schedule (agent/schedules/dynamic.ts) claims due rows.
+export const schedules = pgTable(
+  "schedules",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    ownerPrincipalId: text("owner_principal_id").notNull(),
+    authenticator: text("authenticator").notNull(),
+    issuer: text("issuer"),
+    linqThread: text("linq_thread"),
+    ownerHandle: text("owner_handle"),
+    task: text("task").notNull(),
+    nextRunAt: text("next_run_at").notNull(),
+    everyMinutes: integer("every_minutes"),
+    enabled: integer("enabled").notNull().default(1),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: text("lease_expires_at"),
+    lastRunAt: text("last_run_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("schedules_due_idx").on(table.enabled, table.nextRunAt),
+    index("schedules_workspace_idx").on(
+      table.workspaceId,
+      table.createdAt.desc().nullsFirst()
+    ),
+    check("schedules_enabled_check", sql`${table.enabled} IN (0, 1)`),
+    check(
+      "schedules_every_minutes_check",
+      sql`${table.everyMinutes} IS NULL OR ${table.everyMinutes} >= 1`
+    ),
+  ]
+);
