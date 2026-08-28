@@ -290,3 +290,31 @@ export const schedules = pgTable(
     ),
   ]
 );
+
+// Non-secret personal identifiers the user routinely says out loud: frequent
+// flyer / loyalty numbers, Known Traveler Number, membership IDs, seat and meal
+// preferences. Unlike `encrypted_secrets`, these rows ARE returned to the model
+// so the agent can recall them several steps into a booking. Values are stored
+// in plaintext on purpose: they are low-sensitivity, and it keeps the query
+// path simple and auditable. Passwords, card numbers, SSNs, API keys, and OAuth
+// tokens must never be written here - those stay in `encrypted_secrets` via the
+// web form. Not FK'd to workspaces: a Linq principal that never signed in has
+// no workspace row (same rationale as `web_monitors` and `schedules`).
+export const vaultNotes = pgTable(
+  "vault_notes",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    label: text("label").notNull(),
+    value: text("value").notNull(),
+    category: text("category"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("vault_notes_workspace_updated_idx").on(
+      table.workspaceId,
+      table.updatedAt.desc().nullsFirst()
+    ),
+  ]
+);
