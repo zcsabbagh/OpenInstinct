@@ -43,6 +43,13 @@
       "when": 1787879626052,
       "tag": "0005_classy_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787880418611,
+      "tag": "0006_heavy_centennial",
+      "breakpoints": true
     }
   ]
 }
