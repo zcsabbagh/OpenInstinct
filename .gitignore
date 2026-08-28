@@ -11,3 +11,6 @@ next-env.d.ts
 dist
 .DS_Store
 *.tsbuildinfo
+
+# Claude Code agent worktrees (nested checkouts; break oxlint/vitest/knip scans)
+.claude/worktrees/
