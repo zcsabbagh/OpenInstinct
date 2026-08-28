@@ -11,6 +11,14 @@ export async function proxy(request: NextRequest) {
     // the sign-in page and never renders.
     pathname === "/icon.png" ||
     pathname === "/google-connected" ||
+    // Where Vercel Connect sends the browser back after Google OAuth. The
+    // redirect carries no session cookie, so without this the callback is
+    // bounced to /sign-in: the user lands on a phone-number form instead of
+    // the confirmation page, and the proactive "we're in" message never
+    // fires because the route never runs. The handler re-verifies the
+    // workspace against the live connection and is claimOnce-guarded, so
+    // reaching it without a session cannot fabricate a message.
+    pathname === "/internal/google-connect-notify" ||
     // The contact card is opened by someone who just texted Mouse for the
     // first time and, by definition, has never signed in - either as a
     // tapped link or fetched by Linq to attach to the thread. Same shape of

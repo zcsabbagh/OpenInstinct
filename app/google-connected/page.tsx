@@ -9,7 +9,10 @@ export default function GoogleConnectedPage() {
         <p className="text-muted-foreground">
           You can close this page and return to your conversation with Mouse.
         </p>
-        <BackToIMessage phoneNumber={env.LINQ_PHONE_NUMBER} />
+        <BackToIMessage
+          label="Open Messages"
+          phoneNumber={env.LINQ_PHONE_NUMBER}
+        />
       </div>
     </main>
   );
