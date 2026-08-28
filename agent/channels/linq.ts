@@ -29,7 +29,7 @@ import {
   getUserTimezonePref,
   hasBeenIntroduced,
 } from "@/lib/user-prefs";
-import { sendContactCard } from "@/lib/contact-card";
+import { nextRound, sendPacedOnboarding } from "@/lib/paced-onboarding";
 import { transcribeAudio } from "@/agent/lib/voice";
 
 interface InboundAttachment {
@@ -289,6 +289,15 @@ export default linqChannel({
       return null;
     }
 
+    // Durable, cold-start-safe count of accepted inbound messages for this
+    // workspace - paces the contact-card and Shortcut-offer sends below (see
+    // lib/paced-onboarding.ts). Placed here, after the invite gate and the
+    // voice-note fold above (both of which already returned null on
+    // failure), so a message dropped by either never bumps the round: only
+    // a message this turn is actually going to process - as the intro, the
+    // Google-disconnected prompt, or a normal dispatch - counts as a round.
+    const round = await nextRound(scope.workspaceId);
+
     // Durable per-workspace delivery target, kept fresh on every accepted
     // inbound message (not just the branches below that reach the return
     // statement) so any later authored code - including the onboarding link
@@ -342,12 +351,9 @@ export default linqChannel({
 
     const justIntroduced = await claimFirstContact(scope.workspaceId);
     if (justIntroduced) {
-      // Before anything else: the thread is currently a bare phone number, so
-      // give it a name and a face. Everything after this - including the Google
-      // authorization link - reads as coming from Mouse rather than from an
-      // unknown number.
-      await sendContactCard(context.thread);
-
+      // The contact card no longer opens the conversation - it now arrives
+      // on round 3 (see lib/paced-onboarding.ts) so a brand-new thread isn't
+      // hit with everything at once. This is still round 1.
       const googleOutcome = await sendIntroSequence(
         context,
         googleWorkspace.state,
@@ -396,6 +402,12 @@ export default linqChannel({
         );
       }
     }
+
+    // Sent last, right before the model's own reply is dispatched below: eve
+    // only starts generating that reply once onMessage returns, so this
+    // always lands first and reads as a quick aside ahead of the real
+    // answer - see lib/paced-onboarding.ts.
+    await sendPacedOnboarding(context.thread, scope.workspaceId, round);
 
     return {
       auth: {

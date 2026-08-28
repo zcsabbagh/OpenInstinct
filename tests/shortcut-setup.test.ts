@@ -2,7 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   buildConfiguredShortcutMessage,
   buildManualShortcutMessage,
+  buildShortcutNudgeMessage,
 } from "../lib/shortcut-setup";
+
+describe("buildShortcutNudgeMessage", () => {
+  it("puts the URL alone on its own line, with no other text on that line", () => {
+    const url = "https://www.icloud.com/shortcuts/abc123";
+    const message = buildShortcutNudgeMessage(url);
+    const lines = message.split("\n");
+
+    expect(lines).toContain(url);
+    expect(lines.at(-1)).toBe(url);
+    expect(message).not.toContain("\n\n");
+    expect(message).not.toMatch(/[*_#`]/u);
+  });
+});
 
 describe("shortcut setup copy", () => {
   it("puts the configured link alone on its own line", () => {

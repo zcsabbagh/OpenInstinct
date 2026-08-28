@@ -99,16 +99,14 @@ type LinqThread = LinqInboundMessageContext["thread"];
  * route) avoids depending on that route being publicly reachable from
  * wherever Linq's servers fetch from, and skips a redundant network hop.
  *
- * Not wired into the intro sequence yet — call this from
- * `agent/channels/linq.ts` once the intro rewrite lands:
- *
- *   await sendContactCard(context.thread);
+ * Called from `lib/paced-onboarding.ts` on the user's 3rd accepted inbound
+ * message, not on first contact - see that module for why.
  */
 export async function sendContactCard(thread: LinqThread): Promise<void> {
   const vcard = mouseContactCardVCard();
   // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- Same root cause as agent/channels/linq.ts's file-level disable: LinqInboundMessageContext["thread"] resolves through eve's chat/index.d.ts, which re-exports Thread from a "messages-*.js" chunk the published eve package doesn't ship, so `thread` checks as unresolvable here.
   await thread.post({
-    markdown: "Save my info so I show up as Mouse, not a random number:",
+    markdown: "btw, add my contact info for easier access",
     attachments: [
       {
         data: new TextEncoder().encode(vcard),

@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { channelState, db } from "@/db";
 
 // Durable, Postgres-backed replacement for the bookkeeping a Chat SDK channel
@@ -49,6 +49,44 @@ export async function claimOnce(
     })
     .returning({ key: channelState.key });
   return inserted.length > 0;
+}
+
+/**
+ * Atomically increments the integer counter stored under `key` within
+ * `namespace` and returns its new value; a first call starts the counter at
+ * 1. Backed by a single `INSERT ... ON CONFLICT DO UPDATE` statement, so the
+ * increment happens under Postgres's row lock on the conflicting row -
+ * concurrent callers for the same namespace/key serialize and each gets a
+ * distinct, gapless value, the same guarantee `UPDATE t SET n = n + 1` gives
+ * for an existing row. Use this for durable per-workspace counters (like
+ * `agent/channels/linq.ts`'s accepted-inbound-message round count) that must
+ * survive a cold start and never double-count a race.
+ */
+export async function incrementCounter(
+  namespace: string,
+  key: string
+): Promise<number> {
+  const now = new Date().toISOString();
+  const [row] = await db
+    .insert(channelState)
+    .values({
+      namespace,
+      key,
+      value: "1",
+      createdAt: now,
+      expiresAt: null,
+    })
+    .onConflictDoUpdate({
+      target: [channelState.namespace, channelState.key],
+      set: { value: sql`(${channelState.value}::int + 1)::text` },
+    })
+    .returning({ value: channelState.value });
+  if (!row?.value) {
+    throw new Error(
+      `incrementCounter: no value returned for ${namespace}/${key}`
+    );
+  }
+  return Number.parseInt(row.value, 10);
 }
 
 /**

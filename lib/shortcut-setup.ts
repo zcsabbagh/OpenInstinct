@@ -35,6 +35,22 @@ const TRIGGER_STEPS = [
 
 const SIRI_CAVEAT = `skip saying "hey siri, ${SHORTCUT_NAME.toLowerCase()}" for now - Record Audio has a long-standing bug where it freezes at 0:00 when Siri starts it. worth trying on your phone, but use the button if it hangs`;
 
+/**
+ * Ready-to-send copy for the proactive round-5 offer sent by
+ * `lib/paced-onboarding.ts` - a one-line nudge, not the full setup
+ * walkthrough `buildConfiguredShortcutMessage` sends when the user asks for
+ * a faster way to reach Mouse via `send_shortcut_setup`. Only called when
+ * `env.MOUSE_SHORTCUT_URL` is configured; there is no manual-build-steps
+ * variant here, unlike the on-demand tool - an unprompted wall of build
+ * steps is not a "quick offer" in the way a one-line link is.
+ */
+export function buildShortcutNudgeMessage(shortcutUrl: string): string {
+  return [
+    "also, you can use this shortcut to message me from anywhere. set your action button to this shortcut to talk to me on the go:",
+    shortcutUrl,
+  ].join("\n");
+}
+
 /** Ready-to-send copy when a signed shortcut link is configured. */
 export function buildConfiguredShortcutMessage(shortcutUrl: string): string {
   return [

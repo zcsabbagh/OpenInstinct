@@ -26,6 +26,7 @@ const pgliteBackedTestFiles = [
   "tests/database-migration.test.ts",
   "tests/timezone.test.ts",
   "tests/durable-linq-target.test.ts",
+  "tests/paced-onboarding.test.ts",
 ];
 
 export default defineConfig({
