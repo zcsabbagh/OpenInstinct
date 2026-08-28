@@ -21,6 +21,7 @@ import {
 } from "@/lib/invites";
 import { renderInputRequest } from "@/lib/hitl-prompt";
 import { linqCredentials } from "@/lib/linq";
+import { splitMessageIntoBubbles } from "@/lib/message-bubbles";
 import { buildGoogleConnectNotifyUrl } from "@/lib/google-connect-notify";
 import { saveDurableLinqTarget } from "@/lib/linq-target";
 import { normalizeAuthPhoneNumber } from "@/lib/auth/phone-number";
@@ -217,6 +218,18 @@ async function shouldBlockUninvited(input: {
   return true;
 }
 
+// Mirrors the private `firstNonEmptyLine` helper in eve's default Chat SDK
+// handler (node_modules/eve/dist/src/public/channels/chat-sdk/chatSdkChannel.js),
+// used the same way here: the first non-blank line of a mid-turn message,
+// shown as the typing indicator while a tool call runs.
+function firstNonEmptyLine(message: string): string | undefined {
+  for (const line of message.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return undefined;
+}
+
 export default linqChannel({
   credentials: linqCredentials(),
   events: {
@@ -231,6 +244,38 @@ export default linqChannel({
       if (!channel.thread) return;
       for (const request of eventData.requests) {
         await channel.thread.post({ markdown: renderInputRequest(request) });
+      }
+    },
+
+    // eve's default Chat SDK handler for this event does streamed-message
+    // finalization: it posts an anchor message and edits it as tokens
+    // arrive, then edits it one last time here. Streaming is hardcoded off
+    // for this channel (`streaming: !1` in the compiled
+    // node_modules/eve/dist/src/public/channels/linq/linqChannel.js, passed
+    // through to chatSdkChannel), so that edit path (`canStream` in
+    // node_modules/eve/dist/src/public/channels/chat-sdk/chatSdkChannel.js)
+    // can never be reached - the default handler always falls through to
+    // posting the whole reply as one `thread.post` call. Overriding this
+    // event only changes what happens on that fallback path: instead of one
+    // `thread.post`, split the reply so a bare URL line becomes its own
+    // bubble (see lib/message-bubbles.ts) and post each segment in order.
+    //
+    // The other branch of the default handler - `finishReason ===
+    // "tool-calls"` - stashes the first non-empty line of a mid-turn message
+    // as `pendingToolCallMessage`, which `actions.requested` surfaces as the
+    // typing indicator; it never posts. That bookkeeping is preserved
+    // as-is below.
+    async "message.completed"(eventData, channel) {
+      if (eventData.finishReason === "tool-calls") {
+        channel.state.pendingToolCallMessage = eventData.message
+          ? (firstNonEmptyLine(eventData.message) ?? null)
+          : null;
+        return;
+      }
+      channel.state.pendingToolCallMessage = null;
+      if (!channel.thread || !eventData.message) return;
+      for (const bubble of splitMessageIntoBubbles(eventData.message)) {
+        await channel.thread.post({ markdown: bubble });
       }
     },
   },
