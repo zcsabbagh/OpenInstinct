@@ -11,8 +11,14 @@ export function messagesHref(rawNumber: string | undefined): string {
   return dialable ? `sms:${dialable}` : "sms:";
 }
 
-/** Strips formatting so the href carries a dialable E.164-ish number. */
-function toDialableNumber(rawNumber: string | undefined): string | undefined {
+/**
+ * Strips formatting so a phone number is dialable E.164-ish. Exported for
+ * other Linq-number consumers (e.g. the contact card's TEL field) that need
+ * the same normalization without going through the `sms:` href.
+ */
+export function toDialableNumber(
+  rawNumber: string | undefined
+): string | undefined {
   if (!rawNumber) return undefined;
   const trimmed = rawNumber.trim();
   if (!trimmed) return undefined;
