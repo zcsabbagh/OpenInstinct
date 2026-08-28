@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { MOUSE_LOGO_DATA_URL } from "./mouse-logo";
 
 export const alt = "Add details to your Mouse vault";
 export const contentType = "image/png";
@@ -15,10 +16,11 @@ const FOREGROUND = "#292927";
  * makes it recognisably the thing they were just talking to, so it is worth
  * having.
  *
- * Drawn as inline SVG rather than the mouse emoji: `next/og` renders through
- * Satori, which does not draw emoji from system fonts and would otherwise have
- * to fetch them from a CDN on the render path. An inline path has no network
- * dependency and cannot silently degrade to a card with no image.
+ * The mark is the real Mouse logo (a hand-drawn mouse with hearts) embedded as
+ * a base64 data URI in ./mouse-logo, not read from disk at request time: this
+ * route builds static, so the string is inlined at build time and the image
+ * has no network dependency and cannot silently degrade to a card with no
+ * image.
  */
 export default function Image() {
   return new ImageResponse(
@@ -33,22 +35,13 @@ export default function Image() {
         width: "100%",
       }}
     >
-      <svg
-        fill="none"
-        height="340"
-        viewBox="0 0 100 100"
-        width="340"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <circle cx="24" cy="30" fill={FOREGROUND} r="17" />
-        <circle cx="76" cy="30" fill={FOREGROUND} r="17" />
-        <circle cx="50" cy="57" fill={FOREGROUND} r="30" />
-        <circle cx="24" cy="28" fill={BACKGROUND} r="8.5" />
-        <circle cx="76" cy="28" fill={BACKGROUND} r="8.5" />
-        <circle cx="39" cy="52" fill={BACKGROUND} r="4.4" />
-        <circle cx="61" cy="52" fill={BACKGROUND} r="4.4" />
-        <ellipse cx="50" cy="66" fill={BACKGROUND} rx="5" ry="3.4" />
-      </svg>
+      <img
+        alt=""
+        height={390}
+        src={MOUSE_LOGO_DATA_URL}
+        style={{ objectFit: "contain" }}
+        width={390}
+      />
       <div
         style={{
           bottom: 54,
