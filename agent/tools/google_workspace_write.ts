@@ -61,23 +61,40 @@ export const googleWorkspaceWriteInputSchema = z.object({
   update: z.enum(GMAIL_UPDATE_ACTIONS).optional(),
 });
 
-type GoogleWorkspaceWriteAction = z.infer<
+type GoogleWorkspaceWriteInput = z.infer<
   typeof googleWorkspaceWriteInputSchema
->["action"];
+>;
 
 export function googleWorkspaceWriteApproval(
-  action: GoogleWorkspaceWriteAction | undefined
+  input: Pick<GoogleWorkspaceWriteInput, "action" | "attendees"> | undefined
 ) {
-  // Only sending email reaches other people and needs a confirmation. Gmail
-  // label changes and calendar create/edit/delete act on the user's own
-  // account and run directly.
-  return action === "send_email" ? "user-approval" : "not-applicable";
+  // Gate on whether the call actually reaches other people, not on the
+  // action name. Gmail label changes never leave the account. Sending email
+  // always reaches other people. A calendar create or update only notifies
+  // anyone when it carries attendees (Calendar sends invitations whenever
+  // `attendees` is non-empty, whether they're newly added or not — see
+  // `sendUpdates` in agent/lib/google-workspace/calendar.ts). A calendar
+  // delete cancels the event for its existing attendees, and this tool has
+  // no way to see that guest list before deciding — the approval policy
+  // runs before the event is read — so every delete requires approval.
+  switch (input?.action) {
+    case "send_email":
+    case "delete_calendar_event":
+      return "user-approval";
+    case "create_calendar_event":
+    case "update_calendar_event":
+      return (input.attendees?.length ?? 0) > 0
+        ? "user-approval"
+        : "not-applicable";
+    default:
+      return "not-applicable";
+  }
 }
 
 export default defineTool({
-  approval: ({ toolInput }) => googleWorkspaceWriteApproval(toolInput?.action),
+  approval: ({ toolInput }) => googleWorkspaceWriteApproval(toolInput),
   description:
-    "Change the authenticated user's Google Workspace. Reversible Gmail label updates act on exact message IDs. Sending email or creating, editing, or deleting a calendar event requires user approval. Calendar edits and deletes act on an exact event ID from a prior read. This tool cannot delete mail, change account settings, or edit contacts.",
+    "Change the authenticated user's Google Workspace. Reversible Gmail label updates act on exact message IDs. Sending email always requires user approval. Creating or updating a calendar event requires approval only when it carries attendees (Google emails them an invitation); events with no attendees run directly. Deleting a calendar event always requires approval, since it may cancel the event for existing attendees. Calendar edits and deletes act on an exact event ID from a prior read. This tool cannot delete mail, change account settings, or edit contacts.",
   inputSchema: googleWorkspaceWriteInputSchema,
   async execute(input, ctx) {
     switch (input.action) {

@@ -88,10 +88,11 @@ Gotchas:
 
 - Attach the connector separately to every Vercel environment that should use
   it. A production attachment does not make preview or local development work.
-- The Gmail read/modify scope is restricted. A Google OAuth app in Testing mode
-  only works for listed test users, and those grants expire after seven days.
-  Broader distribution requires Google's OAuth verification and may require a
-  security assessment.
+- `gmail.modify` is a sensitive scope, not a restricted one, so a Testing-mode
+  app is not limited to the seven-day grant lifetime or the CASA security
+  assessment that restricted scopes like `mail.google.com` trigger. Broader
+  distribution (beyond listed test users) still requires Google's standard
+  OAuth verification.
 - The scopes requested here must also be declared on the Google consent screen.
   After changing scopes or enabled APIs, disconnect and reconnect the account so
   Google issues a grant with the new access.
@@ -100,8 +101,11 @@ Gotchas:
   account.
 - Google Contacts search uses a provider-side lazy cache, so a contact created
   moments ago may not appear immediately.
-- Sending email and creating confirmed calendar events always require approval.
-  Calendar events with attendees send Google invitations.
+- Sending email always requires approval. Creating or updating a calendar
+  event requires approval only when it carries attendees (Google emails them
+  an invitation); events with no attendees run directly. Deleting a calendar
+  event always requires approval, since it can cancel the event for existing
+  attendees.
 
 ## Local development
 
