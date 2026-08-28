@@ -2,10 +2,15 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { createSchedule } from "@/agent/lib/schedule-store";
 import { resolveLinqJobOwner } from "@/lib/linq-target";
+import { isValidTimeZone, nextOccurrence } from "@/lib/schedule-time";
+
+// The model is unreliable at converting a wall-clock time to UTC, so this tool
+// never takes an absolute timestamp. It takes either a delay (in_seconds) or a
+// local clock time + IANA timezone, and does the conversion here.
 
 export default defineTool({
   description:
-    "Schedule a reminder message to the user. Use for 'remind me to X at 3pm' (one-time) or 'text me every day at 9am' (recurring). Convert the time to ISO 8601 with the user's UTC offset. Set every_minutes for a repeating reminder (1440 = daily, 60 = hourly) or leave it null for one-time.",
+    "Schedule a reminder message to the user. For a delay ('remind me in 20 minutes', 'in 3 hours') pass in_seconds. For a clock time ('at 3pm', 'every day at 9am') pass at_time as 24-hour HH:MM plus the user's IANA timezone, and set repeat to 'daily' for a recurring one. If you do not know the user's timezone, ask them once before scheduling.",
   inputSchema: z.object({
     task: z
       .string()
@@ -14,33 +19,66 @@ export default defineTool({
       .describe(
         "What to remind the user about, in plain words (e.g. 'email Matthew')."
       ),
-    first_run_at: z
-      .string()
-      .describe(
-        "When it first fires, ISO 8601 with offset, e.g. 2026-08-28T15:00:00-07:00."
-      ),
-    every_minutes: z
+    in_seconds: z
       .number()
       .int()
-      .min(1)
-      .max(525_600)
-      .nullable()
-      .default(null)
-      .describe("Repeat interval in minutes, or null for a one-time reminder."),
+      .min(10)
+      .max(31_536_000)
+      .optional()
+      .describe(
+        "Fire this many seconds from now. Use for any 'in N minutes/hours/days' request."
+      ),
+    at_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/u)
+      .optional()
+      .describe(
+        "Local clock time as 24-hour HH:MM. Requires timezone. Fires the next time that clock time occurs."
+      ),
+    timezone: z
+      .string()
+      .optional()
+      .describe(
+        "IANA timezone for at_time, e.g. 'America/Phoenix', 'America/New_York'. Required whenever at_time is set."
+      ),
+    repeat: z
+      .enum(["none", "daily"])
+      .default("none")
+      .describe("'daily' repeats at_time every day; 'none' fires once."),
   }),
-  async execute({ every_minutes, first_run_at, task }, ctx) {
-    const parsedFirstRun = new Date(first_run_at);
-    if (Number.isNaN(parsedFirstRun.getTime())) {
+  async execute({ at_time, in_seconds, repeat, task, timezone }, ctx) {
+    let firstRunAt: Date;
+    let everyMinutes: number | null;
+
+    if (in_seconds != null) {
+      if (at_time) {
+        throw new Error("Pass either in_seconds or at_time, not both.");
+      }
+      firstRunAt = new Date(Date.now() + in_seconds * 1_000);
+      everyMinutes = null;
+    } else if (at_time) {
+      if (!timezone) {
+        throw new Error(
+          "at_time needs a timezone. Ask the user which IANA timezone they are in (e.g. America/Phoenix) and try again."
+        );
+      }
+      if (!isValidTimeZone(timezone)) {
+        throw new Error(`"${timezone}" is not a valid IANA timezone.`);
+      }
+      firstRunAt = nextOccurrence(at_time, timezone);
+      everyMinutes = repeat === "daily" ? 1_440 : null;
+    } else {
       throw new Error(
-        "first_run_at must be a valid ISO 8601 datetime with an offset."
+        "Provide in_seconds for a delay, or at_time + timezone for a clock time."
       );
     }
+
     const owner = resolveLinqJobOwner(ctx);
     const result = await createSchedule(owner, {
       task,
-      firstRunAt: parsedFirstRun.toISOString(),
-      everyMinutes: every_minutes,
+      firstRunAt: firstRunAt.toISOString(),
+      everyMinutes,
     });
-    return { created: true, ...result };
+    return { created: true, firesAt: firstRunAt.toISOString(), ...result };
   },
 });
