@@ -13,18 +13,7 @@ export default {
     "taze.config.ts",
   ],
   ignoreDependencies: [
-    // Consumed only by the Eve AI Elements component surface under
-    // components/ai-elements, which is retained as a reusable library even
-    // though no route currently renders it.
-    "@streamdown/cjk",
-    "@streamdown/code",
-    "@streamdown/math",
-    "@streamdown/mermaid",
     "cmdk",
-    "motion",
-    "nanoid",
-    "streamdown",
-    "use-stick-to-bottom",
     // Imported through the owning Tailwind stylesheet rather than TypeScript.
     "shadcn",
     "tailwindcss",
@@ -39,9 +28,8 @@ export default {
     "vercel",
   ],
   ignoreIssues: {
-    // Eve AI Elements and shadcn registry primitives intentionally expose
-    // a reusable component surface wider than this minimal chat consumes.
-    "components/ai-elements/**/*.tsx": ["exports", "files", "types"],
+    // shadcn registry primitives intentionally expose a reusable component
+    // surface wider than this app consumes.
     "components/ui/**/*.tsx": ["exports", "files", "types"],
   },
   project: ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"],
