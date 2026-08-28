@@ -1,7 +1,7 @@
 import Kernel from "@onkernel/sdk";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { readVaultItem } from "@/db/services/vault";
+import { listVaultItems, readVaultItem } from "@/db/services/vault";
 import { scopeFromPrincipal, type AccessScope } from "@/lib/access-scope";
 import { env } from "@/lib/env";
 import type { VaultItemKind } from "@/lib/manager";
@@ -103,7 +103,17 @@ async function prepareVaultAutofill(
   fields: Parameters<typeof resolveVaultAutofillValues>[2]
 ) {
   const item = await readVaultItem(scope, vaultItemId);
-  if (!item) throw new Error("The selected vault item no longer exists.");
+  if (!item) {
+    const saved = await listVaultItems(scope);
+    console.warn(
+      `[vault] fill_from_vault miss: workspace=${scope.workspaceId} handle=${vaultItemId} saved=${String(saved.length)}`
+    );
+    throw new Error(
+      saved.length === 0
+        ? "No credentials are saved for this workspace. If the user already completed the vault link, the phone number they signed in with on the web may not match the number this conversation comes from."
+        : "That vault handle does not match any saved item in this workspace."
+    );
+  }
 
   const secret = await readSecret({ id: item.id, namespace: "vault", scope });
   if (secret === undefined) {
