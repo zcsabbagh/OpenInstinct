@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { addressSecretStringSchema } from "./address";
 import { paymentCardSecretStringSchema } from "./payment-card";
+import { phoneSecretSchema } from "./phone";
 
 export const vaultItemKindSchema = z.enum([
   "login",
@@ -57,6 +59,26 @@ const vaultItemInputSchema = z
       context.addIssue({
         code: "custom",
         message: "Complete the card details before saving.",
+        path: ["secret"],
+      });
+    }
+    if (
+      input.kind === "address" &&
+      !addressSecretStringSchema.safeParse(input.secret).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Enter a complete address before saving.",
+        path: ["secret"],
+      });
+    }
+    if (
+      input.kind === "phone" &&
+      !phoneSecretSchema.safeParse(input.secret).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Enter a valid phone number before saving.",
         path: ["secret"],
       });
     }

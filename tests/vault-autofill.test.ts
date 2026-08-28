@@ -1,5 +1,6 @@
 import type { ToolContext } from "eve/tools";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { serializeAddress } from "../lib/manager/address";
 import { serializePaymentCard } from "../lib/manager/payment-card";
 
 const VAULT_ITEM_ID = "00000000-0000-4000-8000-000000000001";
@@ -19,7 +20,7 @@ const mocks = vi.hoisted(() => ({
           account: string;
           createdAt: string;
           id: string;
-          kind: "login" | "payment";
+          kind: "address" | "login" | "payment";
           label: string;
           updatedAt: string;
         }
@@ -148,6 +149,63 @@ describe("vault browser autofill", () => {
     expect(code).toMatch(
       /03\/31[\s\S]*context\.newCDPSession\(page\)[\s\S]*Autofill\.trigger[\s\S]*pressSequentially/
     );
+  });
+
+  it("resolves both the composite and granular fields for a saved address", async () => {
+    mocks.readVaultItem.mockResolvedValue({
+      account: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: VAULT_ITEM_ID,
+      kind: "address",
+      label: "Home",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    mocks.readSecret.mockResolvedValue(
+      serializeAddress({
+        city: "Brooklyn",
+        country: "US",
+        kind: "address",
+        line1: "1 Main St",
+        line2: "Apt 4B",
+        postalCode: "11217",
+        region: "NY",
+        version: 1,
+      })
+    );
+
+    await expect(
+      fillFromVault.execute(
+        {
+          browserSessionId: "browser-1",
+          expectedOrigin: "https://checkout.example",
+          fields: [
+            { field: "address", selector: "#address" },
+            { field: "address_line1", selector: "#address-line1" },
+            { field: "address_city", selector: "#address-city" },
+            { field: "address_region", selector: "#address-region" },
+            { field: "address_postal_code", selector: "#address-postal" },
+            { field: "address_country", selector: "#address-country" },
+          ],
+          vaultItemId: VAULT_ITEM_ID,
+        },
+        toolContext
+      )
+    ).resolves.toEqual({
+      filledFields: [
+        "address",
+        "address_line1",
+        "address_city",
+        "address_region",
+        "address_postal_code",
+        "address_country",
+      ],
+      origin: "https://checkout.example",
+      success: true,
+    });
+
+    const code = mocks.executePlaywright.mock.calls[0]?.[1].code;
+    expect(code).toContain("1 Main St");
+    expect(code).toContain("Brooklyn, NY, 11217, US");
   });
 
   it("rejects fields that do not belong to the selected vault item", async () => {
