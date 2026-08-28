@@ -41,7 +41,6 @@ function owner(workspaceId: string): LinqJobOwner {
     authenticator: "linq",
     issuer: null,
     linqThread: null,
-    linqThreadId: null,
     ownerHandle: null,
   };
 }
