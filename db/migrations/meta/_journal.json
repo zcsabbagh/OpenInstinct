@@ -57,6 +57,13 @@
       "when": 1787889375584,
       "tag": "0007_windy_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787892158568,
+      "tag": "0008_fast_captain_stacy",
+      "breakpoints": true
     }
   ]
 }
