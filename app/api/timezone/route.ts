@@ -6,7 +6,10 @@ import {
 } from "@/app/_lib/server/request-scope";
 import { isAllowedMutationOrigin } from "@/lib/manager";
 import { isValidTimeZone } from "@/lib/schedule-time";
-import { getUserTimezone, setUserTimezone } from "@/lib/user-prefs";
+import {
+  getUserTimezonePref,
+  setUserTimezoneFromSource,
+} from "@/lib/user-prefs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +22,12 @@ const timezoneReportSchema = z.object({ timezone: z.string().min(1) });
 // it up for cookieless link-preview crawlers), so this must resolve the
 // workspace from the authenticated session and no-op for anyone without
 // one - it never accepts or trusts a caller-supplied workspace id.
+//
+// The browser is the lowest-ranked timezone source (see
+// lib/user-prefs.ts): it reports the device's *current* zone, which is wrong
+// while travelling, so it is written with source "browser" and
+// `setUserTimezoneFromSource` will refuse to let it clobber a Google
+// Calendar sync or an explicit set_timezone already on file.
 export async function POST(request: Request) {
   try {
     const scope = await requireRequestScope();
@@ -36,9 +45,11 @@ export async function POST(request: Request) {
     }
 
     const { timezone } = parsed.data;
-    const current = await getUserTimezone(scope.workspaceId);
-    if (current !== timezone) {
-      await setUserTimezone(scope.workspaceId, timezone);
+    const current = await getUserTimezonePref(scope.workspaceId);
+    if (current?.timezone !== timezone) {
+      // Lowest-ranked source (see lib/user-prefs.ts): this is a no-op when a
+      // Google Calendar sync or an explicit set_timezone already outranks it.
+      await setUserTimezoneFromSource(scope.workspaceId, timezone, "browser");
     }
 
     return Response.json(

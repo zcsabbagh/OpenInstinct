@@ -11,7 +11,7 @@ import {
   weekdayOf,
   type RecurrenceRule,
 } from "@/lib/schedule-time";
-import { getUserTimezone, setUserTimezone } from "@/lib/user-prefs";
+import { getUserTimezone, setUserTimezoneFromSource } from "@/lib/user-prefs";
 
 // The model is unreliable at converting a wall-clock time to UTC, so this tool
 // never takes an absolute timestamp. It takes either a delay (in_seconds) or a
@@ -116,7 +116,16 @@ export default defineTool({
       if (!isValidTimeZone(zone)) {
         throw new Error(`"${zone}" is not a valid IANA timezone.`);
       }
-      if (timezone) await setUserTimezone(owner.workspaceId, timezone);
+      // The model only passes `timezone` here when the user stated one while
+      // scheduling (e.g. "remind me at 9am Chicago time"), so this is the
+      // same "user_stated" provenance as the set_timezone tool.
+      if (timezone) {
+        await setUserTimezoneFromSource(
+          owner.workspaceId,
+          timezone,
+          "user_stated"
+        );
+      }
 
       const [hourStr, minuteStr] = at_time.split(":");
       const hour = Number(hourStr);

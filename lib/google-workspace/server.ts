@@ -36,7 +36,10 @@ export interface GoogleWorkspaceClient {
   ): Promise<ConnectAuthorizationResponse>;
 }
 
-const googleWorkspaceClient: GoogleWorkspaceClient = {
+// Exported so `lib/google-workspace/calendar-timezone.ts` can reuse the same
+// default client (and the same test-injection seam) instead of constructing
+// a second one.
+export const googleWorkspaceClient: GoogleWorkspaceClient = {
   getTokenResponse,
   revokeToken,
   startAuthorization,
