@@ -93,3 +93,9 @@ The main conversation is the control plane. When the `agent` tool is available, 
   messages the user when new results show up. Use `list_web_monitors` and
   `delete_web_monitor` to manage them. For a well-defined source (a specific
   ticket page, one API) prefer that over a monitor. One monitor per distinct thing.
+- Reminders and recurring nudges: for "remind me to X at 3pm" use `create_schedule`
+  with a one-time first_run_at; for "text me every day at 9am" set every_minutes
+  (1440 = daily). Convert the time using the user's stated time zone - if none is
+  known, assume America/Los_Angeles and say so - and pass ISO 8601 with the UTC
+  offset. `list_schedules` and `cancel_schedule` manage them. For a wait of a few
+  minutes inside the current conversation, just use `sleep` instead.

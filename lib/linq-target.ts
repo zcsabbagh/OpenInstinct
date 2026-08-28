@@ -1,3 +1,5 @@
+/* oxlint-disable typescript/no-unsafe-assignment -- SerializedThread resolves through a transitive Chat SDK module the linter cannot see; the shape is validated at delivery time by eve. */
+import type { ChatSdkReceiveTarget } from "eve/channels/chat-sdk";
 import type { SessionAuthContext, SessionContext } from "eve/context";
 
 // Shared plumbing for delivering a proactive message back to the Linq
@@ -45,30 +47,28 @@ export function resolveLinqJobOwner(ctx: SessionContext): LinqJobOwner {
   };
 }
 
-// ChatSdkReceiveTarget = { adapterName?, thread?: SerializedThread, threadId? }
-export function buildLinqReceiveTarget(owner: {
+export function buildLinqReceiveTarget(job: {
   linqThread: string | null;
-  linqThreadId: string | null;
-}): { adapterName?: string; thread?: unknown; threadId?: string } {
-  if (owner.linqThread) {
-    try {
-      return { thread: JSON.parse(owner.linqThread) as unknown };
-    } catch {
-      // fall through to the id form
-    }
+}): ChatSdkReceiveTarget {
+  if (!job.linqThread) {
+    throw new Error("No Linq delivery target was captured for this job.");
   }
-  if (owner.linqThreadId) {
-    return { adapterName: "linq", threadId: owner.linqThreadId };
-  }
-  throw new Error("No Linq delivery target was captured for this job.");
+  return {
+    thread: JSON.parse(job.linqThread) as ChatSdkReceiveTarget["thread"],
+  };
 }
 
-export function buildJobAuth(owner: LinqJobOwner): SessionAuthContext {
+export function buildJobAuth(job: {
+  workspaceId: string;
+  authenticator: string;
+  issuer: string | null;
+  ownerPrincipalId: string;
+}): SessionAuthContext {
   return {
-    attributes: { workspaceId: owner.workspaceId },
-    authenticator: owner.authenticator,
-    ...(owner.issuer ? { issuer: owner.issuer } : {}),
-    principalId: owner.ownerPrincipalId,
+    attributes: { workspaceId: job.workspaceId },
+    authenticator: job.authenticator,
+    ...(job.issuer ? { issuer: job.issuer } : {}),
+    principalId: job.ownerPrincipalId,
     principalType: "user",
   };
 }
