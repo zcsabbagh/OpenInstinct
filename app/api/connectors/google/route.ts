@@ -3,6 +3,7 @@ import {
   UnauthenticatedError,
   unauthorizedResponse,
 } from "@/app/_lib/server/request-scope";
+import { buildGoogleConnectNotifyUrl } from "@/lib/google-connect-notify";
 import { googleWorkspaceActionSchema } from "@/lib/google-workspace/config";
 import {
   disconnectGoogleWorkspace,
@@ -28,10 +29,16 @@ export async function POST(request: Request) {
     const returnUrl = new URL("/", request.url);
 
     if (action === "connect") {
-      returnUrl.searchParams.set("google", "connected");
+      // Routes through /internal/google-connect-notify on the way back to
+      // "/" so the proactive "we're in" message can fire the moment the
+      // connection lands, the same as the Linq-driven connect flow. This
+      // page has a reliable session both now and on return (see
+      // app/page.tsx's timezone-sync comment), but firing the message still
+      // needs eve's cross-channel hand-off, which only authored eve route
+      // code can reach - see lib/google-connect-notify.ts.
       const authorizationUrl = await startGoogleWorkspaceAuthorization(
         scope,
-        returnUrl.toString()
+        buildGoogleConnectNotifyUrl(scope.workspaceId, "portal").toString()
       );
       return sensitiveRedirect(authorizationUrl);
     }

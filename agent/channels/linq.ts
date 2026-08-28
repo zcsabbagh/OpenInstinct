@@ -21,6 +21,8 @@ import {
   workspaceHasActivity,
 } from "@/lib/invites";
 import { LINQ_CONNECTOR } from "@/lib/linq";
+import { buildGoogleConnectNotifyUrl } from "@/lib/google-connect-notify";
+import { saveDurableLinqTarget } from "@/lib/linq-target";
 import { normalizeAuthPhoneNumber } from "@/lib/auth/phone-number";
 import {
   claimIntroduction,
@@ -169,7 +171,11 @@ export async function sendIntroSequence(
   await context.thread.post({ markdown: GOOGLE_SIGN_IN_BUBBLE });
 
   try {
-    const callbackUrl = new URL("/google-connected", env.BETTER_AUTH_URL);
+    // Routes the browser through /internal/google-connect-notify on its way
+    // back to /google-connected so the proactive "we're in" message can fire
+    // with no session available on that landing page - see
+    // lib/google-connect-notify.ts.
+    const callbackUrl = buildGoogleConnectNotifyUrl(scope.workspaceId);
     const authorizationUrl = await startGoogleWorkspaceAuthorization(
       scope,
       callbackUrl.toString()
@@ -283,6 +289,23 @@ export default linqChannel({
       return null;
     }
 
+    // Durable per-workspace delivery target, kept fresh on every accepted
+    // inbound message (not just the branches below that reach the return
+    // statement) so any later authored code - including the onboarding link
+    // this same turn may send a few lines down - can resolve a Linq thread
+    // to text this workspace back, even before any schedule or monitor row
+    // exists. See lib/linq-target.ts.
+    await saveDurableLinqTarget({
+      authenticator: auth.authenticator,
+      issuer: auth.issuer ?? null,
+      linqThread: JSON.stringify(context.thread),
+      ownerHandle: typeof authorUserName === "string" ? authorUserName : null,
+      ownerPrincipalId: principalId,
+      workspaceId: scope.workspaceId,
+    }).catch((error: unknown) => {
+      console.warn("[linq] failed to persist durable delivery target:", error);
+    });
+
     const googleWorkspace = await getGoogleWorkspaceConnection(scope);
 
     // Gated: this reads the cached pref (a cheap indexed lookup) on every
@@ -343,7 +366,10 @@ export default linqChannel({
     } else if (googleWorkspace.state === "disconnected") {
       if (claimOnboardingPrompt(scope.workspaceId)) {
         try {
-          const callbackUrl = new URL("/google-connected", env.BETTER_AUTH_URL);
+          // See the matching comment in sendIntroSequence: this routes the
+          // browser through the notify endpoint so the proactive message can
+          // fire without a session on /google-connected.
+          const callbackUrl = buildGoogleConnectNotifyUrl(scope.workspaceId);
           const authorizationUrl = await startGoogleWorkspaceAuthorization(
             scope,
             callbackUrl.toString()
