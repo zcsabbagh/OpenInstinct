@@ -7,7 +7,7 @@ import { getAuthSession } from "@/lib/auth/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Local Vault Assistant",
+  title: "Mouse",
   description:
     "A self-hosted personal agent with private credentials and Kernel-powered browser execution.",
 };

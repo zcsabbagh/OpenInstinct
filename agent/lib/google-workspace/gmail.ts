@@ -143,7 +143,7 @@ export async function sendGmail(
       ? [`Bcc: ${payload.bcc.map(safeHeader).join(", ")}`]
       : []),
     `Subject: ${safeHeader(payload.subject)}`,
-    `Message-ID: <openinstinct-${stableId}@local>`,
+    `Message-ID: <mouse-${stableId}@local>`,
     ...(payload.inReplyTo
       ? [
           `In-Reply-To: ${safeHeader(payload.inReplyTo)}`,

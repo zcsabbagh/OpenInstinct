@@ -11,9 +11,7 @@ export const googleWorkspaceAuthOptions = {
   connector: GOOGLE_WORKSPACE_CONNECTOR,
   createSubject(principal) {
     if (principal.type !== "user") {
-      throw new Error(
-        "Google Workspace requires an authenticated OpenInstinct user."
-      );
+      throw new Error("Google Workspace requires an authenticated Mouse user.");
     }
     return googleWorkspaceSubject(principal.id);
   },
