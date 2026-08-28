@@ -5,6 +5,11 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   if (
     pathname === "/sign-in" ||
+    // Next serves the app/icon.png metadata route here. A browser asks for
+    // the favicon before anyone signs in, and the matcher below only
+    // exempts favicon.ico, so without this the tab icon is a redirect to
+    // the sign-in page and never renders.
+    pathname === "/icon.png" ||
     pathname === "/google-connected" ||
     // The vault setup link is texted to the user, so a cookieless link
     // preview fetcher has to reach the page and its opengraph-image to
