@@ -195,9 +195,17 @@ export const encryptedSecrets = pgTable(
 // and `introducedAt` so the first-contact intro sequence in
 // `agent/channels/linq.ts` fires exactly once per user and survives cold starts.
 // Not FK'd to workspaces.
+//
+// `timezoneSource` records provenance so `lib/user-prefs.ts`'s precedence rule
+// (Google Calendar > user-stated > browser) can tell whether a new write is
+// allowed to replace what's on file - a bare `timezone` string has no way to
+// tell a deliberate "I'm in Chicago" from the browser's ambient device zone.
+// Nullable: rows written before this column existed, and any writer that
+// predates provenance tracking, leave it unset.
 export const workspacePrefs = pgTable("workspace_prefs", {
   workspaceId: text("workspace_id").primaryKey(),
   timezone: text("timezone"),
+  timezoneSource: text("timezone_source"),
   introducedAt: text("introduced_at"),
   updatedAt: text("updated_at").notNull(),
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_prefs" ADD COLUMN "timezone_source" text;

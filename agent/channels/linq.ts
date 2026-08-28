@@ -10,6 +10,7 @@ import { auth } from "@/auth";
 import { accessScopeForUser } from "@/lib/access-scope";
 import { claimOnce } from "@/lib/durable-state";
 import { env, inviteGateEnabled } from "@/lib/env";
+import { syncGoogleCalendarTimezoneIfDue } from "@/lib/google-workspace/calendar-timezone";
 import {
   getGoogleWorkspaceConnection,
   startGoogleWorkspaceAuthorization,
@@ -23,7 +24,7 @@ import { LINQ_CONNECTOR } from "@/lib/linq";
 import { normalizeAuthPhoneNumber } from "@/lib/auth/phone-number";
 import {
   claimIntroduction,
-  getUserTimezone,
+  getUserTimezonePref,
   hasBeenIntroduced,
 } from "@/lib/user-prefs";
 import { transcribeAudio } from "@/agent/lib/voice";
@@ -251,14 +252,38 @@ export default linqChannel({
       return null;
     }
 
-    const timezone = await getUserTimezone(scope.workspaceId);
+    const googleWorkspace = await getGoogleWorkspaceConnection(scope);
+
+    // Gated: this reads the cached pref (a cheap indexed lookup) on every
+    // message, but only reaches out to the Calendar API when the stored
+    // value is absent, still browser-sourced, or stale - see
+    // lib/google-workspace/calendar-timezone.ts. Running it here, before the
+    // timezone note below, means a message that arrives just after the user
+    // connects Google can pick up the fresh value in the very same turn
+    // instead of waiting for the next one.
+    let timezonePref = await getUserTimezonePref(scope.workspaceId);
+    const syncedTimezone = await syncGoogleCalendarTimezoneIfDue(
+      scope,
+      googleWorkspace.state,
+      timezonePref
+    ).catch((error: unknown) => {
+      console.warn("[linq] calendar timezone sync failed:", error);
+      return null;
+    });
+    if (syncedTimezone) {
+      timezonePref = {
+        source: "google_calendar",
+        timezone: syncedTimezone,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    const timezone = timezonePref?.timezone ?? null;
     turnContext.push(
       timezone
         ? `The current time is ${new Date().toISOString()} (UTC). The user's timezone is ${timezone} - use it for any time the user mentions.`
         : `The current time is ${new Date().toISOString()} (UTC). The user's timezone is not on file yet - it is usually captured automatically the next time the user opens the web portal, so do not open with asking for it or bring it up as small talk. If the user states their timezone or a location, save it right away with set_timezone. Only ask directly as a last resort, right when you are about to schedule something at a clock time and have no other way to get it.`
     );
 
-    const googleWorkspace = await getGoogleWorkspaceConnection(scope);
     const onboardingContext: string[] = [];
 
     const justIntroduced = await claimFirstContact(scope.workspaceId);
