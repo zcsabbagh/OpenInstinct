@@ -191,8 +191,18 @@ export const encryptedSecrets = pgTable(
   ]
 );
 
-// Web-monitoring jobs backed by an Exa Webset + Monitor. Not FK'd to workspaces:
-// a Linq principal that never signed in has no workspace row.
+// Per-workspace preferences. Just the timezone for now, so scheduled reminders
+// and calendar events land in the user's local time. Not FK'd to workspaces.
+export const workspacePrefs = pgTable("workspace_prefs", {
+  workspaceId: text("workspace_id").primaryKey(),
+  timezone: text("timezone"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Web-monitoring jobs. Each is a saved search that the daily dispatcher
+// (agent/schedules/web-monitors.ts) re-runs against the plain Exa Search API
+// and diffs against seen URLs. Not FK'd to workspaces: a Linq principal that
+// never signed in has no workspace row.
 export const webMonitors = pgTable(
   "web_monitors",
   {
@@ -202,21 +212,21 @@ export const webMonitors = pgTable(
     authenticator: text("authenticator").notNull(),
     issuer: text("issuer"),
     linqThread: text("linq_thread"),
-    linqThreadId: text("linq_thread_id"),
     ownerHandle: text("owner_handle"),
     query: text("query").notNull(),
-    exaWebsetId: text("exa_webset_id").notNull(),
-    exaMonitorId: text("exa_monitor_id").notNull(),
     seenItemIds: text("seen_item_ids").notNull(),
+    nextCheckAt: text("next_check_at").notNull(),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: text("lease_expires_at"),
+    lastCheckedAt: text("last_checked_at"),
     createdAt: text("created_at").notNull(),
   },
   (table) => [
+    index("web_monitors_due_idx").on(table.nextCheckAt),
     index("web_monitors_workspace_idx").on(
       table.workspaceId,
       table.createdAt.desc().nullsFirst()
     ),
-    index("web_monitors_exa_webset_idx").on(table.exaWebsetId),
-    index("web_monitors_exa_monitor_idx").on(table.exaMonitorId),
   ]
 );
 

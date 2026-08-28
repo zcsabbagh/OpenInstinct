@@ -1,61 +1,34 @@
-import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { db, webMonitors } from "@/db";
-import { env } from "@/lib/env";
-import {
-  createDailyMonitor,
-  createWebset,
-  deleteMonitor,
-  deleteWebset,
-  ensureWebhook,
-  itemTitle,
-  listWebsetItems,
-} from "@/lib/exa";
+import { exaSearch } from "@/lib/exa";
 import type { LinqJobOwner } from "@/lib/linq-target";
 
-// Exa monitors run at most once daily. 13:00 UTC ~= early morning US.
-const MONITOR_CRON = "0 13 * * *";
-const MONITOR_TIMEZONE = "Etc/UTC";
-const SEEN_ITEM_CAP = 500;
+// A web monitor is a saved Exa search. On creation we run it once and record
+// every current URL as "seen", so the first real alert only carries genuinely
+// new results. The daily dispatcher (agent/schedules/web-monitors.ts) re-runs
+// each due search, diffs against seen URLs, and messages the user on a hit.
 
-export const WEB_MONITOR_WEBHOOK_PATH = "/webhooks/web-monitor";
+const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+const SEEN_CAP = 400;
 
-// Deterministic shared token so the webhook route can authenticate Exa without
-// storing per-webhook secrets.
-export function webhookToken(): string {
-  return createHash("sha256")
-    .update(`${env.BETTER_AUTH_SECRET}:web-monitor-webhook`)
-    .digest("hex")
-    .slice(0, 40);
-}
-
-function webhookUrl(): string {
-  const url = new URL(WEB_MONITOR_WEBHOOK_PATH, env.BETTER_AUTH_URL);
-  url.searchParams.set("token", webhookToken());
-  return url.toString();
-}
+export type WebMonitorRow = typeof webMonitors.$inferSelect;
 
 export async function createWebMonitor(
   owner: LinqJobOwner,
   query: string
-): Promise<{ id: string; nextRunAt: string | null }> {
-  await ensureWebhook(webhookUrl());
-
-  const webset = await createWebset(query);
-  let monitor;
+): Promise<{ id: string; nextCheckAt: string }> {
+  let seed: string[] = [];
   try {
-    monitor = await createDailyMonitor({
-      websetId: webset.id,
-      query,
-      cron: MONITOR_CRON,
-      timezone: MONITOR_TIMEZONE,
-    });
-  } catch (error) {
-    await deleteWebset(webset.id).catch(() => undefined);
-    throw error;
+    seed = (await exaSearch(query, 10)).map((result) => result.url);
+  } catch {
+    // A transient search failure shouldn't block creating the monitor; the
+    // first daily run will seed instead.
   }
 
   const id = randomUUID();
+  const now = new Date();
+  const nextCheckAt = new Date(now.getTime() + CHECK_INTERVAL_MS).toISOString();
   await db.insert(webMonitors).values({
     id,
     workspaceId: owner.workspaceId,
@@ -63,107 +36,102 @@ export async function createWebMonitor(
     authenticator: owner.authenticator,
     issuer: owner.issuer,
     linqThread: owner.linqThread,
-    linqThreadId: owner.linqThreadId,
     ownerHandle: owner.ownerHandle,
     query,
-    exaWebsetId: webset.id,
-    exaMonitorId: monitor.id,
-    seenItemIds: "[]",
-    createdAt: new Date().toISOString(),
+    seenItemIds: JSON.stringify(seed),
+    nextCheckAt,
+    createdAt: now.toISOString(),
   });
-
-  return { id, nextRunAt: monitor.nextRunAt ?? null };
+  return { id, nextCheckAt };
 }
 
-export async function listWebMonitors(
-  owner: Pick<LinqJobOwner, "workspaceId">
-) {
-  const rows = await db
+export function listWebMonitors(owner: Pick<LinqJobOwner, "workspaceId">) {
+  return db
     .select({
       id: webMonitors.id,
       query: webMonitors.query,
+      lastCheckedAt: webMonitors.lastCheckedAt,
       createdAt: webMonitors.createdAt,
     })
     .from(webMonitors)
     .where(eq(webMonitors.workspaceId, owner.workspaceId))
     .orderBy(desc(webMonitors.createdAt));
-  return rows;
 }
 
 export async function deleteWebMonitor(
   owner: Pick<LinqJobOwner, "workspaceId">,
   id: string
 ): Promise<boolean> {
-  const [row] = await db
-    .select()
-    .from(webMonitors)
+  const deleted = await db
+    .delete(webMonitors)
     .where(
       and(
         eq(webMonitors.id, id),
         eq(webMonitors.workspaceId, owner.workspaceId)
       )
     )
-    .limit(1);
-  if (!row) return false;
-
-  await deleteMonitor(row.exaMonitorId).catch(() => undefined);
-  await deleteWebset(row.exaWebsetId).catch(() => undefined);
-  await db.delete(webMonitors).where(eq(webMonitors.id, id));
-  return true;
+    .returning({ id: webMonitors.id });
+  return deleted.length > 0;
 }
 
-export interface WebMonitorDelivery {
-  monitor: typeof webMonitors.$inferSelect;
-  newItems: { title: string; url: string; note: string }[];
+// One UPDATE ... RETURNING leases every due, unclaimed monitor.
+export function claimDueMonitors(options: {
+  now: Date;
+  leaseForMs: number;
+}): Promise<WebMonitorRow[]> {
+  const nowIso = options.now.toISOString();
+  const leaseExpiresAt = new Date(
+    options.now.getTime() + options.leaseForMs
+  ).toISOString();
+  return db
+    .update(webMonitors)
+    .set({ leaseToken: randomUUID(), leaseExpiresAt })
+    .where(
+      and(
+        lte(webMonitors.nextCheckAt, nowIso),
+        or(
+          isNull(webMonitors.leaseExpiresAt),
+          lt(webMonitors.leaseExpiresAt, nowIso)
+        )
+      )
+    )
+    .returning();
 }
 
-// Given an Exa event that references a webset or monitor, return the owning row
-// and the items we have not delivered yet (then persist that we have seen them).
-export async function collectNewItems(ref: {
-  websetId?: string;
-  monitorId?: string;
-}): Promise<WebMonitorDelivery | null> {
-  const row = ref.monitorId
-    ? await db
-        .select()
-        .from(webMonitors)
-        .where(eq(webMonitors.exaMonitorId, ref.monitorId))
-        .limit(1)
-        .then((r) => r[0])
-    : ref.websetId
-      ? await db
-          .select()
-          .from(webMonitors)
-          .where(eq(webMonitors.exaWebsetId, ref.websetId))
-          .limit(1)
-          .then((r) => r[0])
-      : undefined;
-  if (!row) return null;
-
-  const items = await listWebsetItems(row.exaWebsetId);
-  const seen = new Set<string>(safeParseIds(row.seenItemIds));
-  const fresh = items.filter((item) => !seen.has(item.id));
-  if (fresh.length === 0) return null;
-
-  const nextSeen = [...seen, ...fresh.map((item) => item.id)].slice(
-    -SEEN_ITEM_CAP
-  );
+export async function completeMonitorCheck(
+  row: WebMonitorRow,
+  currentUrls: string[]
+): Promise<void> {
+  const merged = [
+    ...new Set([...parseSeen(row.seenItemIds), ...currentUrls]),
+  ].slice(-SEEN_CAP);
   await db
     .update(webMonitors)
-    .set({ seenItemIds: JSON.stringify(nextSeen) })
+    .set({
+      seenItemIds: JSON.stringify(merged),
+      nextCheckAt: new Date(Date.now() + CHECK_INTERVAL_MS).toISOString(),
+      leaseToken: null,
+      leaseExpiresAt: null,
+      lastCheckedAt: new Date().toISOString(),
+    })
     .where(eq(webMonitors.id, row.id));
-
-  return {
-    monitor: row,
-    newItems: fresh.slice(0, 10).map((item) => ({
-      title: itemTitle(item),
-      url: item.properties?.url ?? "",
-      note: (item.properties?.description ?? "").trim().slice(0, 300),
-    })),
-  };
 }
 
-function safeParseIds(value: string): string[] {
+export async function releaseMonitorCheck(
+  row: WebMonitorRow,
+  retryAt: Date
+): Promise<void> {
+  await db
+    .update(webMonitors)
+    .set({
+      nextCheckAt: retryAt.toISOString(),
+      leaseToken: null,
+      leaseExpiresAt: null,
+    })
+    .where(eq(webMonitors.id, row.id));
+}
+
+export function parseSeen(value: string): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
     return Array.isArray(parsed)

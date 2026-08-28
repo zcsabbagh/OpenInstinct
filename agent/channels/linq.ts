@@ -11,6 +11,7 @@ import {
 } from "@/lib/google-workspace/server";
 import { LINQ_CONNECTOR } from "@/lib/linq";
 import { normalizeAuthPhoneNumber } from "@/lib/auth/phone-number";
+import { getUserTimezone } from "@/lib/user-prefs";
 import { transcribeAudio } from "@/agent/lib/voice";
 
 interface InboundAttachment {
@@ -152,6 +153,14 @@ export default linqChannel({
       ? `better-auth:${verifiedUserId}`
       : auth.principalId;
     const scope = accessScopeForUser(principalId);
+
+    const timezone = await getUserTimezone(scope.workspaceId);
+    turnContext.push(
+      timezone
+        ? `The current time is ${new Date().toISOString()} (UTC). The user's timezone is ${timezone} - use it for any time the user mentions.`
+        : `The current time is ${new Date().toISOString()} (UTC). The user's timezone is not on file - ask for it before scheduling anything at a clock time.`
+    );
+
     const googleWorkspace = await getGoogleWorkspaceConnection(scope);
     const onboardingContext: string[] = [];
 

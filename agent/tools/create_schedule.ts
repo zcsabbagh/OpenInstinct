@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSchedule } from "@/agent/lib/schedule-store";
 import { resolveLinqJobOwner } from "@/lib/linq-target";
 import { isValidTimeZone, nextOccurrence } from "@/lib/schedule-time";
+import { getUserTimezone, setUserTimezone } from "@/lib/user-prefs";
 
 // The model is unreliable at converting a wall-clock time to UTC, so this tool
 // never takes an absolute timestamp. It takes either a delay (in_seconds) or a
@@ -47,6 +48,7 @@ export default defineTool({
       .describe("'daily' repeats at_time every day; 'none' fires once."),
   }),
   async execute({ at_time, in_seconds, repeat, task, timezone }, ctx) {
+    const owner = resolveLinqJobOwner(ctx);
     let firstRunAt: Date;
     let everyMinutes: number | null;
 
@@ -57,23 +59,24 @@ export default defineTool({
       firstRunAt = new Date(Date.now() + in_seconds * 1_000);
       everyMinutes = null;
     } else if (at_time) {
-      if (!timezone) {
+      const zone = timezone ?? (await getUserTimezone(owner.workspaceId));
+      if (!zone) {
         throw new Error(
-          "at_time needs a timezone. Ask the user which IANA timezone they are in (e.g. America/Phoenix) and try again."
+          "at_time needs a timezone and none is on file. Ask the user which IANA timezone they are in (e.g. America/Phoenix), then call this again with it."
         );
       }
-      if (!isValidTimeZone(timezone)) {
-        throw new Error(`"${timezone}" is not a valid IANA timezone.`);
+      if (!isValidTimeZone(zone)) {
+        throw new Error(`"${zone}" is not a valid IANA timezone.`);
       }
-      firstRunAt = nextOccurrence(at_time, timezone);
+      if (timezone) await setUserTimezone(owner.workspaceId, timezone);
+      firstRunAt = nextOccurrence(at_time, zone);
       everyMinutes = repeat === "daily" ? 1_440 : null;
     } else {
       throw new Error(
-        "Provide in_seconds for a delay, or at_time + timezone for a clock time."
+        "Provide in_seconds for a delay, or at_time (+ timezone) for a clock time."
       );
     }
 
-    const owner = resolveLinqJobOwner(ctx);
     const result = await createSchedule(owner, {
       task,
       firstRunAt: firstRunAt.toISOString(),
