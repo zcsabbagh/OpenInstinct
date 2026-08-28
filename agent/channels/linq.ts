@@ -1,4 +1,4 @@
-/* oxlint-disable typescript/no-unsafe-call, typescript/no-unsafe-member-access -- Eve's Linq adapter exposes the thread through a transitive Chat SDK type; TypeScript still checks this contextual handler. */
+/* oxlint-disable typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-argument, typescript/no-unsafe-type-assertion -- Eve's Linq adapter exposes the thread and message through a transitive Chat SDK type; TypeScript still checks this contextual handler. */
 import { connectLinqCredentials } from "@vercel/connect/eve";
 import { defaultLinqAuth, linqChannel } from "eve/channels/linq";
 import { z } from "zod";
@@ -11,6 +11,79 @@ import {
 } from "@/lib/google-workspace/server";
 import { LINQ_CONNECTOR } from "@/lib/linq";
 import { normalizeAuthPhoneNumber } from "@/lib/auth/phone-number";
+import { transcribeAudio } from "@/agent/lib/voice";
+
+interface InboundAttachment {
+  name?: string;
+  mimeType?: string;
+  url?: string;
+}
+
+function isAudioAttachment(attachment: InboundAttachment): boolean {
+  const mime = attachment.mimeType ?? "";
+  if (mime.startsWith("audio/")) return true;
+  return /\.(m4a|mp3|aac|caf|wav|aiff|amr|ogg|opus)$/iu.test(
+    attachment.name ?? ""
+  );
+}
+
+/**
+ * Voice notes: transcribe with ElevenLabs and fold the text into the message,
+ * dropping the audio attachment. Claude can't take audio and the AI SDK
+ * Anthropic provider throws on an audio file part, so the transcript has to
+ * replace it before the turn starts.
+ *
+ * Returns false when the message could not be made model-safe (transcription
+ * failed, or the runtime Message object refused the edit); the caller then
+ * acknowledges to the user and drops the turn instead of letting it crash.
+ */
+async function foldVoiceNoteIntoMessage(message: {
+  attachments?: readonly InboundAttachment[];
+  text?: string;
+}): Promise<boolean> {
+  const attachments = (message.attachments ?? []) as InboundAttachment[];
+  const audio = attachments.filter(
+    (attachment): attachment is InboundAttachment & { url: string } =>
+      isAudioAttachment(attachment) &&
+      typeof attachment.url === "string" &&
+      attachment.url.length > 0
+  );
+  if (audio.length === 0) return true;
+
+  let transcript: string;
+  try {
+    const parts = await Promise.all(
+      audio.map((attachment) => transcribeAudio(attachment.url))
+    );
+    transcript = parts
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  } catch (error) {
+    console.warn("[linq] voice transcription failed:", error);
+    return false;
+  }
+  if (!transcript) return false;
+
+  const mutable = message as { attachments?: unknown; text?: string };
+  try {
+    mutable.attachments = attachments.filter(
+      (attachment) => !isAudioAttachment(attachment)
+    );
+    mutable.text = [message.text, transcript]
+      .map((value) => (value ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+  } catch {
+    return false;
+  }
+
+  const stillHasAudio = (
+    (message.attachments ?? []) as InboundAttachment[]
+  ).some(isAudioAttachment);
+  return !stillHasAudio && Boolean(message.text);
+}
 
 const verifiedPhoneUserSchema = z.object({
   id: z.string().min(1),
@@ -47,6 +120,24 @@ export default linqChannel({
       : connectLinqCredentials(LINQ_CONNECTOR),
   async onMessage(context, message) {
     if (message.author.isBot) return null;
+
+    const turnContext: string[] = [];
+    if (
+      Array.isArray(message.attachments) &&
+      message.attachments.some(isAudioAttachment)
+    ) {
+      const ok = await foldVoiceNoteIntoMessage(message);
+      if (!ok) {
+        await context.thread.post({
+          markdown:
+            "got your voice note but couldn't make it out - mind typing it?",
+        });
+        return null;
+      }
+      turnContext.push(
+        "The user's message came in as a voice note; the text above is its transcript."
+      );
+    }
 
     const auth = defaultLinqAuth(message);
     const authorUserName: unknown = message.author.userName;
@@ -104,7 +195,7 @@ export default linqChannel({
         },
         principalId,
       },
-      context: onboardingContext,
+      context: [...turnContext, ...onboardingContext],
     };
   },
 });
