@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { channelState, db } from "@/db";
 
 // Durable, Postgres-backed replacement for the bookkeeping a Chat SDK channel
@@ -48,4 +49,57 @@ export async function claimOnce(
     })
     .returning({ key: channelState.key });
   return inserted.length > 0;
+}
+
+/**
+ * Upserts `value` for `namespace`/`key`. Unlike `claimOnce`, this always
+ * writes the latest value - for state that legitimately changes over time
+ * (like a workspace's current Linq delivery target), not a fact that should
+ * only ever be set once.
+ */
+export async function putState(
+  namespace: string,
+  key: string,
+  value: string,
+  options?: { ttlMs?: number }
+): Promise<void> {
+  const now = new Date();
+  const expiresAt = options?.ttlMs
+    ? new Date(now.getTime() + options.ttlMs).toISOString()
+    : null;
+  await db
+    .insert(channelState)
+    .values({
+      namespace,
+      key,
+      value,
+      createdAt: now.toISOString(),
+      expiresAt,
+    })
+    .onConflictDoUpdate({
+      target: [channelState.namespace, channelState.key],
+      set: { value, expiresAt },
+    });
+}
+
+/**
+ * Reads the value written by `putState` for `namespace`/`key`, or `null`
+ * when no row exists or its `expiresAt` has passed. An expired row is left
+ * in place rather than deleted here; `channel_state_expires_idx` exists for
+ * a future pruning job.
+ */
+export async function getState(
+  namespace: string,
+  key: string
+): Promise<string | null> {
+  const [row] = await db
+    .select({ value: channelState.value, expiresAt: channelState.expiresAt })
+    .from(channelState)
+    .where(
+      and(eq(channelState.namespace, namespace), eq(channelState.key, key))
+    )
+    .limit(1);
+  if (!row) return null;
+  if (row.expiresAt && row.expiresAt <= new Date().toISOString()) return null;
+  return row.value;
 }
