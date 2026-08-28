@@ -11,6 +11,12 @@ export async function proxy(request: NextRequest) {
     // the sign-in page and never renders.
     pathname === "/icon.png" ||
     pathname === "/google-connected" ||
+    // The contact card is opened by someone who just texted Mouse for the
+    // first time and, by definition, has never signed in - either as a
+    // tapped link or fetched by Linq to attach to the thread. Same shape of
+    // fix as /icon.png below: without this it 307s to /sign-in and the vCard
+    // never loads.
+    pathname === "/contact.vcf" ||
     // The vault setup link is texted to the user, so a cookieless link
     // preview fetcher has to reach the page and its opengraph-image to
     // render a card. Nothing sensitive renders server-side: the page only
