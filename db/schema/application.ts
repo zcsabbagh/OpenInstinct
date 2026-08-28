@@ -256,8 +256,19 @@ export const webMonitors = pgTable(
   ]
 );
 
-// User-text-driven reminders and recurring nudges. `everyMinutes` null => one
-// time. The dispatcher schedule (agent/schedules/dynamic.ts) claims due rows.
+// User-text-driven reminders and recurring nudges. `everyMinutes` is legacy
+// (see below) and no longer written by the app; `repeatKind` null => one time.
+// The dispatcher schedule (agent/schedules/dynamic.ts) claims due rows and
+// re-anchors recurring ones to their original wall-clock time (`lib/schedule-time.ts`
+// `nextRecurrence`) rather than accumulating off the actual fire instant, so a
+// late tick never drifts the schedule.
+//
+// `everyMinutes` predates weekly/monthly/yearly recurrence, which cannot be
+// expressed as a fixed minute interval (a month is not a fixed duration, and
+// neither is a year across a leap day). It is kept, always null for rows
+// written by the current app, purely so migration 0007 can backfill
+// `repeatKind`/`timezone`/anchor fields for pre-existing daily rows without a
+// destructive rewrite; do not read it for new behavior.
 export const schedules = pgTable(
   "schedules",
   {
@@ -271,6 +282,16 @@ export const schedules = pgTable(
     task: text("task").notNull(),
     nextRunAt: text("next_run_at").notNull(),
     everyMinutes: integer("every_minutes"),
+    // Recurrence rule, null for a one-time reminder. When set, `timezone` and
+    // the anchor hour/minute are always present; the day/weekday/month fields
+    // are populated per `repeatKind` (see `lib/schedule-time.ts` RecurrenceRule).
+    repeatKind: text("repeat_kind"),
+    timezone: text("timezone"),
+    anchorHour: integer("anchor_hour"),
+    anchorMinute: integer("anchor_minute"),
+    repeatDayOfWeek: integer("repeat_day_of_week"),
+    repeatDayOfMonth: integer("repeat_day_of_month"),
+    repeatMonth: integer("repeat_month"),
     enabled: integer("enabled").notNull().default(1),
     leaseToken: text("lease_token"),
     leaseExpiresAt: text("lease_expires_at"),
@@ -287,6 +308,30 @@ export const schedules = pgTable(
     check(
       "schedules_every_minutes_check",
       sql`${table.everyMinutes} IS NULL OR ${table.everyMinutes} >= 1`
+    ),
+    check(
+      "schedules_repeat_kind_check",
+      sql`${table.repeatKind} IS NULL OR ${table.repeatKind} IN ('daily', 'weekly', 'monthly', 'yearly')`
+    ),
+    check(
+      "schedules_anchor_hour_check",
+      sql`${table.anchorHour} IS NULL OR ${table.anchorHour} BETWEEN 0 AND 23`
+    ),
+    check(
+      "schedules_anchor_minute_check",
+      sql`${table.anchorMinute} IS NULL OR ${table.anchorMinute} BETWEEN 0 AND 59`
+    ),
+    check(
+      "schedules_repeat_day_of_week_check",
+      sql`${table.repeatDayOfWeek} IS NULL OR ${table.repeatDayOfWeek} BETWEEN 0 AND 6`
+    ),
+    check(
+      "schedules_repeat_day_of_month_check",
+      sql`${table.repeatDayOfMonth} IS NULL OR ${table.repeatDayOfMonth} BETWEEN 1 AND 31`
+    ),
+    check(
+      "schedules_repeat_month_check",
+      sql`${table.repeatMonth} IS NULL OR ${table.repeatMonth} BETWEEN 1 AND 12`
     ),
   ]
 );

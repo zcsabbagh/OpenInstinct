@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { listSchedules } from "@/agent/lib/schedule-store";
+import { listSchedules, rowToRule } from "@/agent/lib/schedule-store";
 import { resolveLinqJobOwner } from "@/lib/linq-target";
 
 export default defineTool({
@@ -14,7 +14,7 @@ export default defineTool({
         id: row.id,
         task: row.task,
         nextRunAt: row.nextRunAt,
-        repeatsEveryMinutes: row.everyMinutes,
+        repeat: rowToRule(row),
         active: row.enabled === 1,
         lastRunAt: row.lastRunAt,
       })),
