@@ -255,7 +255,7 @@ export default linqChannel({
     turnContext.push(
       timezone
         ? `The current time is ${new Date().toISOString()} (UTC). The user's timezone is ${timezone} - use it for any time the user mentions.`
-        : `The current time is ${new Date().toISOString()} (UTC). The user's timezone is not on file - ask for it before scheduling anything at a clock time.`
+        : `The current time is ${new Date().toISOString()} (UTC). The user's timezone is not on file yet - it is usually captured automatically the next time the user opens the web portal, so do not open with asking for it or bring it up as small talk. If the user states their timezone or a location, save it right away with set_timezone. Only ask directly as a last resort, right when you are about to schedule something at a clock time and have no other way to get it.`
     );
 
     const googleWorkspace = await getGoogleWorkspaceConnection(scope);
