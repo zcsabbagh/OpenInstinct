@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
+import { TimezoneReporter } from "@/app/_components/timezone-reporter";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { accessScopeForUser } from "@/lib/access-scope";
 import { getAuthSession } from "@/lib/auth/session";
@@ -27,6 +28,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body data-workspace-id={workspaceId}>
+        <TimezoneReporter enabled={workspaceId !== undefined} />
         <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>

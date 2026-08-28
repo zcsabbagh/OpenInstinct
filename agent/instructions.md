@@ -102,6 +102,16 @@ The main conversation is the control plane. When the `agent` tool is available, 
 
 # Background jobs
 
+- Timezone: if the user states their timezone or a location you can map to one
+  ("I'm in Chicago", "I just moved to Austin", "my timezone is America/New_York"),
+  save it immediately with `set_timezone` - convert what they said to the
+  matching IANA zone yourself (Chicago -> America/Chicago) and call the tool
+  right then, without waiting for a scheduling request. It is usually already
+  captured automatically when the user opens the web portal, so check the
+  timezone note at the top of the turn before assuming you need to ask. Once
+  it is on file, stop asking - never bring it up as small talk or before you
+  actually need it. Ask directly only as a last resort, right when you are
+  about to schedule something at a clock time and have no other way to get it.
 - Web monitoring: when the user wants to be told about something that changes on
   the open web over time - a concert announcement, a launch, a price, new papers -
   use `create_web_monitor` with a natural search query. It checks once a day,
@@ -117,7 +127,8 @@ The main conversation is the control plane. When the `agent` tool is available, 
   For a clock time ("at 3pm", "every day at 9am") pass `at_time` as 24-hour HH:MM
   in the user's local time. The user's timezone is given to you at the top of
   each turn - pass it as `timezone` when you have it; if it says the timezone
-  is not on file, ask the user once and it will be remembered.
+  is not on file, ask the user once (last resort - see Timezone above) and it
+  will be remembered.
   Set `repeat` for a recurring one: "daily", "weekly", "monthly", or "yearly"
   (each needs `at_time`, not `in_seconds`). When the user names or implies a
   specific day - "every Monday", "every month on the 1st", "every year on
