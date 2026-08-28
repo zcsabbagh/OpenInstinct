@@ -3,7 +3,6 @@
 import { LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/app/_lib/auth-client";
-import { browserRunStoreKeyForWorkspace } from "@/app/_lib/browser-run-store";
 
 export function AccountControl() {
   const { data: session } = authClient.useSession();
@@ -17,7 +16,6 @@ export function AccountControl() {
       <Button
         aria-label="Sign out"
         onClick={() => {
-          clearWorkspaceBrowserData();
           void authClient.signOut().finally(() => {
             window.location.assign("/sign-in");
           });
@@ -35,10 +33,4 @@ export function AccountControl() {
 function maskPhoneNumber(phoneNumber: string | null | undefined) {
   if (!phoneNumber) return "Signed in";
   return `Phone ending in ${phoneNumber.slice(-4)}`;
-}
-
-function clearWorkspaceBrowserData() {
-  const workspaceId = document.body.dataset.workspaceId;
-  if (!workspaceId) return;
-  window.localStorage.removeItem(browserRunStoreKeyForWorkspace(workspaceId));
 }

@@ -30,10 +30,9 @@ describe("database services", () => {
     const database = pgliteDatabase as unknown as Database;
     vi.doMock("@/db", () => ({ ...schema, db: database }));
 
-    const [browsers, chats, secrets, sessions, settings, scope, vault] =
+    const [browsers, secrets, sessions, settings, scope, vault] =
       await Promise.all([
         import("@/db/services/browsers"),
-        import("@/db/services/chats"),
         import("@/db/services/secrets"),
         import("@/db/services/sessions"),
         import("@/db/services/settings"),
@@ -49,44 +48,10 @@ describe("database services", () => {
 
     expect(await sessions.isSessionOwned(alice, "session-alice")).toBe(true);
     expect(await sessions.isSessionOwned(bob, "session-alice")).toBe(false);
-    expect(await sessions.listOwnedSessionIds(alice)).toEqual(
-      new Set(["session-alice"])
-    );
-    expect(await sessions.listOwnedSessionIds(bob)).toEqual(new Set());
 
     await sessions.claimSession(bob, "session-alice");
     expect(await sessions.isSessionOwned(alice, "session-alice")).toBe(true);
     expect(await sessions.isSessionOwned(bob, "session-alice")).toBe(false);
-
-    await chats.saveChat(alice, {
-      sessionId: "session-alice",
-      title: "Initial title",
-      usage: { costUsd: 0.25, inputTokens: 10, outputTokens: 4 },
-    });
-    await chats.saveChat(alice, {
-      sessionId: "session-alice",
-      title: "Updated title",
-    });
-
-    const aliceChat = await chats.readChat(alice, "session-alice");
-    expect(aliceChat?.title).toBe("Updated title");
-    expect(aliceChat?.usage).toEqual({
-      costUsd: 0.25,
-      inputTokens: 10,
-      outputTokens: 4,
-    });
-    expect(await chats.readChat(bob, "session-alice")).toBeUndefined();
-    expect(await chats.listChats(alice)).toEqual([aliceChat]);
-    expect(await chats.listChats(bob)).toEqual([]);
-
-    await expect(
-      chats.saveChat(bob, {
-        sessionId: "session-alice",
-        title: "Bob's title",
-      })
-    ).rejects.toThrow(/Failed query: insert into "chats"/);
-    expect(await chats.readChat(alice, "session-alice")).toEqual(aliceChat);
-    expect(await chats.readChat(bob, "session-alice")).toBeUndefined();
 
     await browsers.createBrowserSession(alice, {
       createdAt: new Date().toISOString(),

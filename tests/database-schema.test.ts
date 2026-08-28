@@ -152,15 +152,7 @@ describe("migration deployment policy", () => {
       "utf8"
     );
     const services = await Promise.all(
-      [
-        "browsers",
-        "chats",
-        "scope",
-        "secrets",
-        "sessions",
-        "settings",
-        "vault",
-      ].map(
+      ["browsers", "scope", "secrets", "sessions", "settings", "vault"].map(
         async (name) =>
           await readFile(
             new URL(`../db/services/${name}.ts`, import.meta.url),

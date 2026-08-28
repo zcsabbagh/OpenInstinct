@@ -1,50 +1,26 @@
 "use client";
 
-import {
-  BotIcon,
-  ChevronsUpDownIcon,
-  CloudIcon,
-  KeyRoundIcon,
-  MailIcon,
-  MessageSquareIcon,
-} from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
-import {
-  ModelSelector as ModelSelectorRoot,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogo,
-  ModelSelectorShortcut,
-  ModelSelectorTrigger,
-} from "@/components/ai-elements/model-selector";
+import { KeyRoundIcon, MailIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ManagerMutation, ManagerSnapshot } from "@/lib/manager";
-import type { ModelCatalogItem } from "@/app/_lib/model-catalog";
-import { modelCatalogSchema } from "@/app/_lib/model-catalog";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import type { ManagerSnapshot } from "@/lib/manager";
 import { useManager } from "./use-manager";
-
-const priceFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 2,
-  minimumFractionDigits: 0,
-  style: "currency",
-  currency: "USD",
-});
-
-const LINQ_PHONE_NUMBER = "+12052611117";
 
 export function WorkspaceManager({
   googleNotice,
 }: {
   readonly googleNotice?: "unavailable";
 }) {
-  const { busy, error, mutate, snapshot } = useManager();
-  const browserReady = snapshot?.browser.available === true;
+  const { error, snapshot } = useManager();
 
   return (
     <main className="flex min-w-0 flex-col gap-8">
@@ -68,41 +44,7 @@ export function WorkspaceManager({
         </Alert>
       ) : null}
 
-      <ChannelsSection browserReady={browserReady} />
-
       <GoogleWorkspaceSection connection={snapshot?.googleWorkspace} />
-
-      <section aria-labelledby="connectors-heading" className="space-y-3">
-        <h2 className="type-section-title" id="connectors-heading">
-          Infrastructure
-        </h2>
-        <div className="divide-y divide-border/50 border-y border-border/50">
-          <ConnectorRow
-            action={
-              <span className="type-caption text-muted-foreground">
-                {browserReady ? "Connected" : "Unavailable"}
-              </span>
-            }
-            description="Run isolated browsers in your Kernel account."
-            icon={<CloudIcon />}
-            label="Kernel browser"
-          />
-          <ConnectorRow
-            action={
-              <ModelSelector
-                busy={busy}
-                modelId={snapshot?.runtime.inference}
-                onSubmit={mutate}
-              />
-            }
-            description={
-              snapshot?.runtime.inference ?? "Loading the current model…"
-            }
-            icon={<BotIcon />}
-            label="AI Gateway model"
-          />
-        </div>
-      </section>
     </main>
   );
 }
@@ -113,26 +55,42 @@ function GoogleWorkspaceSection({
   readonly connection?: ManagerSnapshot["googleWorkspace"];
 }) {
   const state = connection?.state;
-  const description =
-    state === "connected"
-      ? (connection?.accountLabel ?? "Gmail, Calendar, and Contacts connected.")
-      : state === "unavailable"
-        ? "Attach a Vercel Connect Google OAuth connector to enable this."
-        : "Gmail, Calendar, and Contacts through your Google account.";
+  const connected = state === "connected";
 
   return (
     <section aria-labelledby="connections-heading" className="space-y-3">
       <h2 className="type-section-title" id="connections-heading">
         Connections
       </h2>
-      <div className="divide-y divide-border/50 border-y border-border/50">
-        <ConnectorRow
-          action={<GoogleWorkspaceAction state={state} />}
-          description={description}
-          icon={<MailIcon />}
-          label="Google Workspace"
-        />
-      </div>
+      <Card>
+        <CardHeader>
+          <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background">
+            <GoogleGlyph className="size-5" />
+          </div>
+          <CardTitle>Google Workspace</CardTitle>
+          <CardDescription>
+            {connected
+              ? (connection?.accountLabel ??
+                "Gmail, Calendar, and Contacts connected.")
+              : state === "unavailable"
+                ? "Attach a Vercel Connect Google OAuth connector to enable this."
+                : "Gmail, Calendar, and Contacts through your Google account."}
+          </CardDescription>
+          <CardAction>
+            <GoogleWorkspaceAction state={state} />
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-2">
+          {connected ? (
+            <Badge variant="success">Connected</Badge>
+          ) : (
+            <Badge variant="outline">Not connected</Badge>
+          )}
+          <Badge variant="ghost">Gmail</Badge>
+          <Badge variant="ghost">Calendar</Badge>
+          <Badge variant="ghost">Contacts</Badge>
+        </CardContent>
+      </Card>
     </section>
   );
 }
@@ -162,198 +120,30 @@ function GoogleWorkspaceAction({
   );
 }
 
-function ChannelsSection({ browserReady }: { readonly browserReady: boolean }) {
+function GoogleGlyph({ className }: { readonly className?: string }) {
   return (
-    <section aria-labelledby="channels-heading" className="space-y-3">
-      <h2 className="type-section-title" id="channels-heading">
-        Channels
-      </h2>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {browserReady ? (
-          <Button
-            className="h-11 justify-start"
-            nativeButton={false}
-            render={<Link href="/chat" />}
-            variant="outline"
-          >
-            <MessageSquareIcon />
-            WebChat
-          </Button>
-        ) : (
-          <Button className="h-11 justify-start" disabled variant="outline">
-            <MessageSquareIcon />
-            WebChat
-          </Button>
-        )}
-        <Button
-          className="h-11 justify-start"
-          nativeButton={false}
-          render={<a href={`sms:${LINQ_PHONE_NUMBER}`} />}
-          variant="outline"
-        >
-          <MailIcon />
-          iMessage
-        </Button>
-      </div>
-      <p className="type-caption text-muted-foreground">
-        {browserReady
-          ? "WebChat is ready. iMessage opens +1 (205) 261-1117."
-          : "iMessage opens +1 (205) 261-1117. KERNEL_API_KEY is required to enable WebChat."}
-      </p>
-    </section>
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M23.06 12.25c0-.86-.07-1.5-.22-2.16H12.24v3.92h6.2c-.13 1.02-.8 2.56-2.29 3.6l-.02.14 3.32 2.57.23.02c2.12-1.95 3.34-4.82 3.34-8.22"
+        fill="#4285F4"
+      />
+      <path
+        d="M12.24 24c3.02 0 5.56-1 7.41-2.72l-3.53-2.73c-.95.66-2.22 1.12-3.88 1.12-2.96 0-5.48-1.95-6.38-4.65l-.13.01-3.45 2.67-.05.13C3.72 21.32 7.7 24 12.24 24"
+        fill="#34A853"
+      />
+      <path
+        d="M5.86 15.02c-.24-.7-.37-1.45-.37-2.22 0-.77.13-1.52.36-2.22l-.01-.15L2.3 7.72l-.12.06A11.98 11.98 0 0 0 .9 12.8c0 1.93.46 3.76 1.28 5.38z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12.24 5.93c2.1 0 3.51.9 4.32 1.66l3.15-3.06C17.79 1.6 15.26.6 12.24.6 7.7.6 3.72 3.28 1.9 7.42l3.95 3.06c.91-2.7 3.43-4.55 6.39-4.55"
+        fill="#EB4335"
+      />
+    </svg>
   );
-}
-
-function ConnectorRow({
-  action,
-  description,
-  icon,
-  label,
-}: {
-  readonly action: ReactNode;
-  readonly description: string;
-  readonly icon: ReactNode;
-  readonly label: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 py-4">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground">
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="type-label">{label}</p>
-        <p className="truncate type-caption text-muted-foreground">
-          {description}
-        </p>
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function ModelSelector({
-  busy,
-  modelId,
-  onSubmit,
-}: {
-  readonly busy: boolean;
-  readonly modelId?: string;
-  readonly onSubmit: (mutation: ManagerMutation) => Promise<boolean>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [models, setModels] = useState<ModelCatalogItem[]>([]);
-  const [catalogError, setCatalogError] = useState<string>();
-  const [loading, setLoading] = useState(false);
-  const groupedModels = useMemo(() => {
-    const groups = new Map<string, ModelCatalogItem[]>();
-    for (const model of models) {
-      const providerModels = groups.get(model.ownedBy) ?? [];
-      providerModels.push(model);
-      groups.set(model.ownedBy, providerModels);
-    }
-    return [...groups.entries()].sort(([left], [right]) =>
-      left.localeCompare(right)
-    );
-  }, [models]);
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen || models.length > 0 || loading) return;
-    setLoading(true);
-    setCatalogError(undefined);
-    void fetch("/api/models", { cache: "no-store" })
-      .then(async (response) => {
-        const body: unknown = await response.json();
-        if (!response.ok) throw new Error("The model catalog is unavailable.");
-        setModels(modelCatalogSchema.parse(body));
-      })
-      .catch((error: unknown) => {
-        setCatalogError(
-          error instanceof Error
-            ? error.message
-            : "The model catalog is unavailable."
-        );
-      })
-      .finally(() => setLoading(false));
-  };
-
-  const select = async (selectedModelId: string) => {
-    const saved = await onSubmit({
-      action: "model.select",
-      modelId: selectedModelId,
-    });
-    if (saved) setOpen(false);
-  };
-
-  return (
-    <ModelSelectorRoot onOpenChange={handleOpenChange} open={open}>
-      <ModelSelectorTrigger
-        render={
-          <Button disabled={busy} size="sm" type="button" variant="outline" />
-        }
-      >
-        {modelId ? (
-          <ModelSelectorLogo
-            provider={providerLogo(modelId.split("/", 1)[0] ?? modelId)}
-          />
-        ) : null}
-        Choose
-        <ChevronsUpDownIcon />
-      </ModelSelectorTrigger>
-      <ModelSelectorContent
-        className="sm:max-w-xl"
-        showCloseButton
-        title="Choose a model"
-      >
-        <ModelSelectorInput placeholder="Search models…" />
-        <ModelSelectorList className="max-h-[min(32rem,70vh)]">
-          <ModelSelectorEmpty className="px-3 text-left text-muted-foreground">
-            {loading
-              ? "Loading models…"
-              : (catalogError ?? "No matching models.")}
-          </ModelSelectorEmpty>
-          {groupedModels.map(([provider, providerModels]) => (
-            <ModelSelectorGroup heading={provider} key={provider}>
-              {providerModels.map((model) => (
-                <ModelSelectorItem
-                  data-checked={model.id === modelId}
-                  key={model.id}
-                  onSelect={() => void select(model.id)}
-                  value={`${model.name} ${model.id} ${model.ownedBy}`}
-                >
-                  <ModelSelectorLogo provider={providerLogo(model.ownedBy)} />
-                  <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate">{model.name}</span>
-                    <span className="block truncate type-caption text-muted-foreground">
-                      {model.id}
-                    </span>
-                  </span>
-                  {formatPricing(model) ? (
-                    <ModelSelectorShortcut>
-                      {formatPricing(model)}
-                    </ModelSelectorShortcut>
-                  ) : null}
-                </ModelSelectorItem>
-              ))}
-            </ModelSelectorGroup>
-          ))}
-        </ModelSelectorList>
-      </ModelSelectorContent>
-    </ModelSelectorRoot>
-  );
-}
-
-function providerLogo(provider: string) {
-  if (provider === "amazon") return "amazon-bedrock";
-  if (provider === "meta") return "llama";
-  if (provider === "spacexai") return "xai";
-  return provider;
-}
-
-function formatPricing(model: ModelCatalogItem) {
-  if (model.pricing?.input === undefined || model.pricing.output === undefined)
-    return;
-  return `${priceFormatter.format(model.pricing.input)} / ${priceFormatter.format(
-    model.pricing.output
-  )} per M`;
 }

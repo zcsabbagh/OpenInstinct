@@ -13,6 +13,18 @@ export default {
     "taze.config.ts",
   ],
   ignoreDependencies: [
+    // Consumed only by the Eve AI Elements component surface under
+    // components/ai-elements, which is retained as a reusable library even
+    // though no route currently renders it.
+    "@streamdown/cjk",
+    "@streamdown/code",
+    "@streamdown/math",
+    "@streamdown/mermaid",
+    "cmdk",
+    "motion",
+    "nanoid",
+    "streamdown",
+    "use-stick-to-bottom",
     // Imported through the owning Tailwind stylesheet rather than TypeScript.
     "shadcn",
     "tailwindcss",
