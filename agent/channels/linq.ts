@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 import { auth } from "@/auth";
 import { accessScopeForUser } from "@/lib/access-scope";
+import { claimOnce } from "@/lib/durable-state";
 import { env, inviteGateEnabled } from "@/lib/env";
 import {
   getGoogleWorkspaceConnection,
@@ -188,6 +189,21 @@ export default linqChannel({
       : connectLinqCredentials(LINQ_CONNECTOR),
   async onMessage(context, message) {
     if (message.author.isBot) return null;
+
+    // eve's linqChannel hardcodes an in-memory Chat SDK state adapter with no
+    // seam to swap it (see lib/durable-state.ts), so inbound dedup does not
+    // survive a cold start on its own. Claim the message id durably in
+    // Postgres so a redelivered webhook is handled at most once.
+    const messageId =
+      typeof (message as { id?: unknown }).id === "string"
+        ? (message as { id: string }).id
+        : undefined;
+    if (messageId) {
+      const firstDelivery = await claimOnce("linq-inbound", messageId, {
+        ttlMs: 24 * 60 * 60 * 1000,
+      });
+      if (!firstDelivery) return null;
+    }
 
     const turnContext: string[] = [];
     if (
