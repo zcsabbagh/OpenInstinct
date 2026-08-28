@@ -17,9 +17,19 @@ const responseSchema = z.object({ results: z.array(resultSchema) });
 
 export type ExaResult = z.infer<typeof resultSchema>;
 
+export interface ExaSearchOptions {
+  /**
+   * ISO 8601 timestamp. Only results published after this are returned.
+   * Standard `/search` field, available on the same pay-as-you-go tier as
+   * everything else this module calls - no Pro plan required.
+   */
+  startPublishedDate?: string;
+}
+
 export async function exaSearch(
   query: string,
-  numResults = 10
+  numResults = 10,
+  options: ExaSearchOptions = {}
 ): Promise<ExaResult[]> {
   const key = env.EXA_API_KEY;
   if (!key) throw new Error("EXA_API_KEY is not set.");
@@ -31,6 +41,9 @@ export async function exaSearch(
       query,
       numResults,
       type: "auto",
+      ...(options.startPublishedDate
+        ? { startPublishedDate: options.startPublishedDate }
+        : {}),
       contents: { text: { maxCharacters: 800 } },
     }),
   });

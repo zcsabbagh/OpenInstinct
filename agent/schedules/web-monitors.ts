@@ -1,11 +1,12 @@
 import { defineSchedule } from "eve/schedules";
-import { exaSearch, resultTitle } from "@/lib/exa";
+import { resultTitle } from "@/lib/exa";
 import { buildJobAuth, buildLinqReceiveTarget } from "@/lib/linq-target";
 import {
   claimDueMonitors,
   completeMonitorCheck,
-  parseSeen,
+  monitorSearch,
   releaseMonitorCheck,
+  selectFreshResults,
 } from "@/lib/web-monitor";
 import linq from "@/agent/channels/linq";
 
@@ -25,9 +26,8 @@ export default defineSchedule({
         await Promise.all(
           rows.map(async (row) => {
             try {
-              const seen = new Set(parseSeen(row.seenItemIds));
-              const results = await exaSearch(row.query, 10);
-              const fresh = results.filter((result) => !seen.has(result.url));
+              const results = await monitorSearch(row.query);
+              const fresh = selectFreshResults(row.seenItemIds, results);
 
               if (fresh.length > 0) {
                 const lines = fresh.flatMap((result) => [
@@ -44,10 +44,7 @@ export default defineSchedule({
                 );
               }
 
-              await completeMonitorCheck(
-                row,
-                results.map((result) => result.url)
-              );
+              await completeMonitorCheck(row, results);
             } catch {
               await releaseMonitorCheck(
                 row,
