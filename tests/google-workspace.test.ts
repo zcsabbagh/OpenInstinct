@@ -145,52 +145,43 @@ describe("Google Workspace connection", () => {
     });
   });
 
-  it("requires approval for anything that reaches other people", () => {
-    expect(googleWorkspaceWriteApproval(undefined)).toBe("not-applicable");
-    expect(googleWorkspaceWriteApproval({ action: "send_email" })).toBe(
-      "user-approval"
-    );
-    expect(googleWorkspaceWriteApproval({ action: "update_email" })).toBe(
-      "not-applicable"
-    );
+  it("leaves every write ungated - the prompt is the safeguard now", () => {
+    // eve raises one approval per tool call and a reply settles exactly one,
+    // so a batch ("cancel everything tomorrow") produced a wall of prompts
+    // that could not be cleared. Sending email had the same shape one prompt
+    // at a time, asking again in machine language after the model had already
+    // stated the recipient and body. Both now rely on the trust boundary in
+    // agent/instructions.md instead.
+    for (const action of [
+      "send_email",
+      "update_email",
+      "create_calendar_event",
+      "update_calendar_event",
+      "delete_calendar_event",
+    ] as const) {
+      expect(googleWorkspaceWriteApproval({ action })).toBe("not-applicable");
+    }
   });
 
-  it("gates calendar create/update on whether attendees are present", () => {
-    expect(
-      googleWorkspaceWriteApproval({ action: "create_calendar_event" })
-    ).toBe("not-applicable");
-    expect(
-      googleWorkspaceWriteApproval({
-        action: "create_calendar_event",
-        attendees: [],
-      })
-    ).toBe("not-applicable");
-    expect(
-      googleWorkspaceWriteApproval({
-        action: "create_calendar_event",
-        attendees: ["friend@example.com"],
-      })
-    ).toBe("user-approval");
-    expect(
-      googleWorkspaceWriteApproval({ action: "update_calendar_event" })
-    ).toBe("not-applicable");
-    // Adding attendees to a previously solo event must also require
-    // approval, not just events created with attendees from the start.
-    expect(
-      googleWorkspaceWriteApproval({
-        action: "update_calendar_event",
-        attendees: ["friend@example.com"],
-      })
-    ).toBe("user-approval");
-  });
-
-  it("always requires approval for calendar deletes", () => {
-    // The approval policy runs before the event is read, so it cannot see
-    // whether the event being deleted has attendees. Treat every deletion
-    // as a potential guest cancellation.
-    expect(
-      googleWorkspaceWriteApproval({ action: "delete_calendar_event" })
-    ).toBe("user-approval");
+  it("never gates the user's own calendar, however many attendees", () => {
+    // This briefly required approval when attendees were present. But
+    // "cancel everything tomorrow" is one tool call per event, each raising
+    // its own prompt, and one reply settles exactly one of them - so a few
+    // events produced a wall of prompts the user could not clear. It is
+    // their calendar; it runs directly and reacts when done.
+    for (const action of [
+      "create_calendar_event",
+      "update_calendar_event",
+      "delete_calendar_event",
+    ] as const) {
+      expect(googleWorkspaceWriteApproval({ action })).toBe("not-applicable");
+      expect(
+        googleWorkspaceWriteApproval({
+          action,
+          attendees: ["friend@example.com"],
+        })
+      ).toBe("not-applicable");
+    }
   });
 
   it("does not interpret Google FreeBusy errors as availability", () => {

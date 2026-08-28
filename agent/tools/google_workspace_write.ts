@@ -66,29 +66,20 @@ type GoogleWorkspaceWriteInput = z.infer<
 >;
 
 export function googleWorkspaceWriteApproval(
-  input: Pick<GoogleWorkspaceWriteInput, "action" | "attendees"> | undefined
+  _input: Pick<GoogleWorkspaceWriteInput, "action" | "attendees"> | undefined
 ) {
-  // Gate on whether the call actually reaches other people, not on the
-  // action name. Gmail label changes never leave the account. Sending email
-  // always reaches other people. A calendar create or update only notifies
-  // anyone when it carries attendees (Calendar sends invitations whenever
-  // `attendees` is non-empty, whether they're newly added or not — see
-  // `sendUpdates` in agent/lib/google-workspace/calendar.ts). A calendar
-  // delete cancels the event for its existing attendees, and this tool has
-  // no way to see that guest list before deciding — the approval policy
-  // runs before the event is read — so every delete requires approval.
-  switch (input?.action) {
-    case "send_email":
-    case "delete_calendar_event":
-      return "user-approval";
-    case "create_calendar_event":
-    case "update_calendar_event":
-      return (input.attendees?.length ?? 0) > 0
-        ? "user-approval"
-        : "not-applicable";
-    default:
-      return "not-applicable";
-  }
+  // Nothing here is gated by the framework any more.
+  //
+  // eve raises one approval per tool call, and a reply settles exactly one of
+  // them, so a request like "cancel everything tomorrow" produced a wall of
+  // identical prompts the user could not clear. Sending email had the same
+  // shape one prompt at a time: the model had already stated the recipient,
+  // subject and body and been told to go ahead, so the gate asked a second
+  // time in machine language.
+  //
+  // The safeguard is now the prompt: state what is about to happen in plain
+  // words before doing it. See the trust boundary in agent/instructions.md.
+  return "not-applicable" as const;
 }
 
 export default defineTool({
