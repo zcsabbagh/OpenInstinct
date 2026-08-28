@@ -27,6 +27,7 @@ import {
   getUserTimezonePref,
   hasBeenIntroduced,
 } from "@/lib/user-prefs";
+import { sendContactCard } from "@/lib/contact-card";
 import { transcribeAudio } from "@/agent/lib/voice";
 
 interface InboundAttachment {
@@ -318,6 +319,12 @@ export default linqChannel({
 
     const justIntroduced = await claimFirstContact(scope.workspaceId);
     if (justIntroduced) {
+      // Before anything else: the thread is currently a bare phone number, so
+      // give it a name and a face. Everything after this - including the Google
+      // authorization link - reads as coming from Mouse rather than from an
+      // unknown number.
+      await sendContactCard(context.thread);
+
       const googleOutcome = await sendIntroSequence(
         context,
         googleWorkspace.state,
