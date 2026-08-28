@@ -191,13 +191,39 @@ export const encryptedSecrets = pgTable(
   ]
 );
 
-// Per-workspace preferences. Just the timezone for now, so scheduled reminders
-// and calendar events land in the user's local time. Not FK'd to workspaces.
+// Per-workspace preferences. Timezone for scheduled reminders / calendar events,
+// and `introducedAt` so the first-contact intro sequence in
+// `agent/channels/linq.ts` fires exactly once per user and survives cold starts.
+// Not FK'd to workspaces.
 export const workspacePrefs = pgTable("workspace_prefs", {
   workspaceId: text("workspace_id").primaryKey(),
   timezone: text("timezone"),
+  introducedAt: text("introduced_at"),
   updatedAt: text("updated_at").notNull(),
 });
+
+// Invite links. Each existing user can mint up to five; redemption is tracked so
+// the Linq front-door gate (`agent/channels/linq.ts`) can let an invited handle
+// through. Not FK'd to workspaces: the issuer may be a Linq principal that never
+// signed in, and the redeemer has no workspace at redemption time.
+export const invites = pgTable(
+  "invites",
+  {
+    code: text("code").primaryKey(),
+    issuerWorkspaceId: text("issuer_workspace_id").notNull(),
+    issuerPrincipalId: text("issuer_principal_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    redeemedAt: text("redeemed_at"),
+    redeemedByHandle: text("redeemed_by_handle"),
+  },
+  (table) => [
+    index("invites_issuer_idx").on(
+      table.issuerWorkspaceId,
+      table.createdAt.desc().nullsFirst()
+    ),
+    index("invites_redeemed_by_idx").on(table.redeemedByHandle),
+  ]
+);
 
 // Web-monitoring jobs. Each is a saved search that the daily dispatcher
 // (agent/schedules/web-monitors.ts) re-runs against the plain Exa Search API

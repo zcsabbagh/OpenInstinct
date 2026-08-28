@@ -31,6 +31,9 @@ export const env = createEnv({
     MODEL_SMOKE_SECRET: optionalValue,
     LINQ_API_KEY: optionalValue,
     LINQ_WEBHOOK_SECRET: optionalValue,
+    // Front-door invite gate. Unset or anything other than "true" leaves the
+    // gate open (fail-open) so the owner is never locked out.
+    INVITE_GATE_ENABLED: optionalValue,
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("production"),
@@ -39,6 +42,8 @@ export const env = createEnv({
   experimental__runtimeEnv: {},
   emptyStringAsUndefined: true,
 });
+
+export const inviteGateEnabled = env.INVITE_GATE_ENABLED === "true";
 
 const authHostname = new URL(env.BETTER_AUTH_URL).hostname;
 
