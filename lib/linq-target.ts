@@ -5,8 +5,8 @@ import type { SessionAuthContext, SessionContext } from "eve/context";
 // Shared plumbing for delivering a proactive message back to the Linq
 // conversation a background job (web monitor, schedule) was created from.
 //
-// `agent/channels/linq.ts` stashes the serialized Chat SDK thread, its id, and
-// the sender handle in the session auth attributes at inbound time. A job row
+// `agent/channels/linq.ts` stashes the serialized Chat SDK thread and the
+// sender handle in the session auth attributes at inbound time. A job row
 // copies those, and the dispatcher / webhook rebuilds the delivery target and a
 // caller auth from them.
 
@@ -16,7 +16,6 @@ export interface LinqJobOwner {
   authenticator: string;
   issuer: string | null;
   linqThread: string | null;
-  linqThreadId: string | null;
   ownerHandle: string | null;
 }
 
@@ -42,7 +41,6 @@ export function resolveLinqJobOwner(ctx: SessionContext): LinqJobOwner {
     authenticator: caller.authenticator,
     issuer: caller.issuer ?? null,
     linqThread: attr(caller.attributes, "linqThread"),
-    linqThreadId: attr(caller.attributes, "linqThreadId"),
     ownerHandle: attr(caller.attributes, "ownerHandle"),
   };
 }
